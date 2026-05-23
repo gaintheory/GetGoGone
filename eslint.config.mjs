@@ -12,7 +12,17 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    "prototype-handoff/**",
   ]),
+  {
+    files: ["src/prototype/**/*.{js,jsx}"],
+    rules: {
+      "react/display-name": "off",
+      "react/no-unescaped-entities": "off",
+      "react-hooks/refs": "off",
+      "@typescript-eslint/no-unused-expressions": "off",
+    },
+  },
 ]);
 
 export default eslintConfig;

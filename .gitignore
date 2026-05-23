@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local scratch files
+inspect-db.mjs
+aaaaaaaaaaa/
+Inventory/
+eng.traineddata
