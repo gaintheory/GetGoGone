@@ -42,6 +42,6 @@ next-env.d.ts
 
 # local scratch files
 inspect-db.mjs
-aaaaaaaaaaa/
-Inventory/
+/aaaaaaaaaaa/
+/Inventory/
 eng.traineddata
