@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { ensureDealershipId } from "@/lib/dealerships";
 
 type BrandBrainPayload = {
   clientId?: string;
@@ -28,43 +29,6 @@ const defaultBrain = {
   objection_handling_notes: "",
   platform_rules: {},
 };
-
-async function resolveClientId(
-  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
-  clientId?: string | null,
-) {
-  if (clientId && clientId !== "agency_overview") {
-    const { data, error } = await supabase
-      .from("dealerships")
-      .select("id")
-      .eq("id", clientId)
-      .maybeSingle();
-
-    if (error) throw error;
-    if (data?.id) return data.id;
-  }
-
-  const { data: existing, error: selectError } = await supabase
-    .from("dealerships")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (selectError) throw selectError;
-  if (existing?.id) return existing.id;
-
-  const { data: created, error: insertError } = await supabase
-    .from("dealerships")
-    .insert({
-      name: process.env.GETGOGONE_DEFAULT_DEALERSHIP_NAME || "Right Price Auto Sales",
-    })
-    .select("id")
-    .single();
-
-  if (insertError) throw insertError;
-  return created.id;
-}
 
 function toClientShape(row: Record<string, unknown>) {
   return {
@@ -124,7 +88,7 @@ export async function GET(request: Request) {
 
   try {
     const clientId = new URL(request.url).searchParams.get("clientId");
-    const dealershipId = await resolveClientId(supabase, clientId);
+    const dealershipId = await ensureDealershipId(supabase, clientId);
     const brain = await ensureBrandBrain(supabase, dealershipId);
 
     return NextResponse.json({ ok: true, brain: toClientShape(brain) });
@@ -152,7 +116,7 @@ export async function PUT(request: Request) {
   }
 
   try {
-    const dealershipId = await resolveClientId(supabase, payload.clientId);
+    const dealershipId = await ensureDealershipId(supabase, payload.clientId);
     await ensureBrandBrain(supabase, dealershipId);
 
     const client = supabase as any;

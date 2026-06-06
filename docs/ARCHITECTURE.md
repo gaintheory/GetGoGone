@@ -14,13 +14,19 @@ Recommended stack:
 
 Project layout:
 - src/app: routes and layouts
+  - src/app/api/auth/: login + logout POST handlers
+  - src/app/api/leads/: lead list/detail, activities, and public inbound endpoint
+  - src/app/login/: site password login page
+  - src/app/v/[vehicleId]/: public per-vehicle landing pages with inquiry form
 - src/components: shared layout and UI components
 - src/features: domain-specific product modules
 - src/prototype: mechanically ported Claude Design screens, data, icons, and UI used as the initial app shell
 - src/lib: shared app utilities and clients
+  - src/lib/auth/: HMAC cookie helper (cookie.ts)
 - docs: product and engineering guidance
 - supabase: migrations and seed data
 - packages: future shared/integration/AI code if the app grows into a workspace
+- middleware.ts: Next.js Edge runtime auth gate (project root)
 
 Workspace navigation:
 - The app now starts in an Agency Command screen for the agency-owner workflow.
@@ -113,3 +119,30 @@ Creative persistence:
 - Creative template reads and writes now accept `clientId`, so saved templates and creative versions are scoped to the active client.
 - Designer canvas JSON now treats the vehicle photo base as a protected layer and supports editable overlay layers for text, badges, shapes, photos, logos, CTAs, ribbons, and stat rows. Reorder/lock metadata is kept in the same layer document.
 - This is still an editable-document-first persistence path. Saved Designer creative rows can be attached to campaign channels through `campaign_assets.template_id`, while rendered PNG/JPG exports create storage-backed file records in `campaign_assets` when campaign context is available.
+
+## Authentication
+
+- `middleware.ts` (Next.js Edge runtime, project root) intercepts every request and verifies the `ggg_auth` signed cookie before forwarding.
+- Unauthenticated page requests are redirected to `/login?next=<original>`; unauthenticated API requests receive `401 { ok: false, error: "unauthenticated" }`.
+- Public paths that bypass the gate: `PUBLIC_PATHS` (e.g. `/login`), `PUBLIC_API_PREFIXES` (e.g. `/api/leads/inbound`), `PUBLIC_PAGE_PREFIXES` (e.g. `/v/`), and static asset extensions.
+- `src/lib/auth/cookie.ts` — Web Crypto API HMAC-SHA256 cookie signing, 30-day expiry, constant-time signature verification.
+- `src/app/api/auth/login/route.ts` — POST handler, constant-time compares submitted password against `SITE_PASSWORD`, sets `ggg_auth` httpOnly + sameSite=lax + secure-in-prod cookie.
+- `src/app/api/auth/logout/route.ts` — POST handler, clears cookie.
+- `src/app/login/page.tsx` — client-side login form.
+- Required env vars: `SITE_PASSWORD`, `SITE_AUTH_COOKIE_SECRET` (32-byte hex), `PUBLIC_BASE_URL`.
+
+## Leads & attribution
+
+End-to-end attribution flow:
+1. Campaign save (`POST /api/campaigns`) creates `campaign_channels` rows and then sets each row's `destination_url` to `<PUBLIC_BASE_URL>/v/<vehicleId>?ch=<channel>&c=<campaignId>&cc=<channelId>&utm_source=<channel>&utm_medium=<paid|organic>&utm_campaign=<campaignId>`.
+2. The operator copies that URL into the channel's ad, organic post, or listing.
+3. A prospect opens the link and lands on `src/app/v/[vehicleId]/page.tsx` — a public page (no auth required; `/v/` is in `PUBLIC_PAGE_PREFIXES`). The page shows the vehicle and an inquiry form (`InquiryForm.tsx`).
+4. Form submission calls `POST /api/leads/inbound` (also public — in `PUBLIC_API_PREFIXES`). The endpoint stores the lead with full attribution: `campaign_channel_id`, `source_channel`, `utm` (jsonb), `inbound_url`, `inbound_ip`, `inbound_user_agent`.
+5. Operator-added leads (walk-in, phone, referral) use `POST /api/leads` with a manual `source` field; they skip the UTM path.
+
+API surface:
+- `GET /api/leads` — list leads (filterable by status) or fetch a single lead with its activity timeline.
+- `POST /api/leads` — operator manually creates a lead.
+- `PATCH /api/leads` — update lead status; auto-logs a `status_change` activity.
+- `POST /api/leads/activities` — log a contact attempt (note, call, SMS, email, appointment). Updates `last_contacted_at` automatically for outbound activities.
+- `POST /api/leads/inbound` — public inquiry endpoint; stores lead + UTM attribution.

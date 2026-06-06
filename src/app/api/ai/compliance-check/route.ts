@@ -2,13 +2,11 @@ import { NextResponse } from "next/server";
 
 import { generateText, getAiStatus } from "@/lib/ai/ai-provider";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-
-const defaultBrain = {
-  bannedPhrases: ["guaranteed approval", "no credit check", "100% approved", "drive away free", "$0 down"],
-  downPaymentRules: "Advertise approved down payment amounts only. If missing, use Low Down Payment or Down Payment Options Available.",
-  financeDisclaimer: "WAC. Subject to approval of credit. Tax, title, license, and dealer fees may be additional.",
-  spanishGuidance: "Prefer adaptation over literal translation.",
-};
+import { resolveDealershipId } from "@/lib/dealerships";
+import {
+  defaultBrandBrain,
+  loadBrandBrain as loadBrandBrainShared,
+} from "@/features/ai/brand-brain";
 
 type CompliancePayload = {
   clientId?: string;
@@ -37,44 +35,11 @@ type ComplianceMatch = {
   end: number;
 };
 
-async function resolveClientId(
-  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
-  clientId?: string | null,
-) {
-  if (clientId && clientId !== "agency_overview") return clientId;
-
-  const { data, error } = await supabase
-    .from("dealerships")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data?.id || null;
-}
-
 async function loadBrandBrain(clientId?: string | null) {
   const supabase = getSupabaseAdmin();
-  if (!supabase) return defaultBrain;
-
-  const dealershipId = await resolveClientId(supabase, clientId);
-  if (!dealershipId) return defaultBrain;
-
-  const { data, error } = await (supabase as any)
-    .from("client_brand_brains")
-    .select("banned_phrases, down_payment_rules, finance_disclaimer, spanish_guidance")
-    .eq("dealership_id", dealershipId)
-    .maybeSingle();
-
-  if (error || !data) return defaultBrain;
-
-  return {
-    bannedPhrases: data.banned_phrases || defaultBrain.bannedPhrases,
-    downPaymentRules: data.down_payment_rules || defaultBrain.downPaymentRules,
-    financeDisclaimer: data.finance_disclaimer || defaultBrain.financeDisclaimer,
-    spanishGuidance: data.spanish_guidance || defaultBrain.spanishGuidance,
-  };
+  if (!supabase) return defaultBrandBrain;
+  const dealershipId = await resolveDealershipId(supabase, clientId);
+  return loadBrandBrainShared(supabase, dealershipId);
 }
 
 function deterministicIssues(headline: string, body: string, brain: Awaited<ReturnType<typeof loadBrandBrain>>) {
@@ -156,7 +121,7 @@ function deterministicIssues(headline: string, body: string, brain: Awaited<Retu
     issues.push({
       severity: "warning",
       message: "Finance copy is missing approval disclaimer language.",
-      suggestion: brain.financeDisclaimer || defaultBrain.financeDisclaimer,
+      suggestion: brain.financeDisclaimer || defaultBrandBrain.financeDisclaimer,
     });
   }
 

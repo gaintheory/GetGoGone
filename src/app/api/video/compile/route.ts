@@ -1,18 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-
-async function resolveClientId(supabase: any, clientId?: string | null) {
-  if (clientId && clientId !== "agency_overview") return clientId;
-  const { data, error } = await supabase
-    .from("dealerships")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) return null;
-  return data?.id || null;
-}
+import { resolveDealershipId } from "@/lib/dealerships";
 
 // ─── Video Provider Adapter ──────────────────────────────────────────────────
 // Priority order: Google Veo → Google Omni → Local Mock Simulator
@@ -98,7 +86,7 @@ export async function POST(request: Request) {
     });
 
     let assetRow: any = null;
-    const finalDealershipId = supabase ? await resolveClientId(supabase, clientId) : null;
+    const finalDealershipId = supabase ? await resolveDealershipId(supabase, clientId) : null;
 
     if (supabase && finalDealershipId && campaignId) {
       const client = supabase as any;

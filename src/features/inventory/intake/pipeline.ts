@@ -127,22 +127,7 @@ async function upsertVehicle(
   }
 
   if (existingId && !options.overwriteExisting) {
-    // Selective update: only fill in null fields in the existing record
-    const { error } = await (supabase as any)
-      .from("vehicles")
-      .update({
-        // Update source tracking fields always
-        source_system: row.source_system,
-        last_synced_at: row.last_synced_at,
-        updated_at: row.updated_at,
-        // Selectively update spec fields only if they are null in the DB
-        // Supabase doesn't support "update if null" natively, so we send
-        // all non-null values and let the DB coalesce logic handle it via
-        // the conditional below (we fetch nulls and patch only those).
-      })
-      .eq("id", existingId);
-
-    // For overwrite=false, do a targeted patch of only the fields that are null
+    // Fetch existing row, then patch only null fields (plus always-updated metadata)
     const { data: existing } = await (supabase as any)
       .from("vehicles")
       .select("*")
@@ -151,12 +136,13 @@ async function upsertVehicle(
 
     if (existing) {
       const patch: Record<string, unknown> = {
+        source_system: row.source_system,
         last_synced_at: row.last_synced_at,
         updated_at: row.updated_at,
       };
       const fillableFields = [
         "stock_number", "year", "make", "model", "trim", "body_style",
-        "mileage", "exterior_color", "interior_color", "condition",
+        "mileage", "exterior_color", "interior_color",
         "fuel_type", "transmission", "drivetrain", "engine", "price",
         "description", "notes", "source_url",
       ] as const;
@@ -165,12 +151,13 @@ async function upsertVehicle(
           patch[field] = row[field as keyof typeof row];
         }
       }
-      if (Object.keys(patch).length > 2) {
-        await (supabase as any).from("vehicles").update(patch).eq("id", existingId);
-      }
+      const { error: patchError } = await (supabase as any)
+        .from("vehicles")
+        .update(patch)
+        .eq("id", existingId);
+      if (patchError) throw new Error(`Vehicle update failed: ${patchError.message}`);
     }
 
-    if (error) throw new Error(`Vehicle update failed: ${error.message}`);
     return { vehicleId: existingId, action: "updated" };
   }
 

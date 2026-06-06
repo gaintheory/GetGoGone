@@ -1,18 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-
-async function resolveClientId(supabase: any, clientId?: string | null) {
-  if (clientId && clientId !== "agency_overview") return clientId;
-  const { data, error } = await supabase
-    .from("dealerships")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) return null;
-  return data?.id || null;
-}
+import { resolveDealershipId } from "@/lib/dealerships";
 
 export async function POST(request: Request) {
   const supabase = getSupabaseAdmin();
@@ -33,7 +21,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const finalDealershipId = supabase ? await resolveClientId(supabase, clientId) : null;
+    const finalDealershipId = supabase ? await resolveDealershipId(supabase, clientId) : null;
 
     // Check if the operator has provided a drop-in API token
     const googleToken = process.env.GOOGLE_ADS_TOKEN || process.env.NEXT_PUBLIC_GOOGLE_ADS_TOKEN || null;

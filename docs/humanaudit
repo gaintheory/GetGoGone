@@ -1,0 +1,14 @@
+AGENCY COMMAND
+
+    Client workspace
+        -can not lick on client card, seems like you should be able to click that
+
+COCKPIT
+    Agent Proposal Queue
+        -Should be able to clicko on the individual reviews and actually review, not just reject or  approve
+
+BRAND BRAIN
+    The whole site keeps refreshing, nothing saves. ive tried to change some banned phrases, and the site refreshes and doesnt save anything.  it def refreshes like every 30 secs, and doesnt save input
+
+AI LIBRARY
+    The whole copy generation interace is not working as it should.  It DOES work to some degree, but furth polish needs to be done.  Anything that can be further inspected needs to be linked with relevant destination, if it needs to be created, create it.  The copy gernation is bad im afraid, further testing will be needed, but i imagine there are plenty of skills.md that can help shap the marketing language to a more precise predictable effectivenes and policy adherent.

@@ -1,77 +1,12 @@
 import { NextResponse } from "next/server";
 import { generateText, getAiStatus } from "@/lib/ai/ai-provider";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-
-const defaultBrain = {
-  toneEnglish: "friendly, direct, and helpful",
-  toneSpanish: "respectful, clear, family-oriented, and natural for local Spanish-speaking buyers",
-  approvedPhrases: [] as string[],
-  bannedPhrases: ["guaranteed approval", "no credit check", "100% approved", "drive away free", "$0 down"],
-  downPaymentRules: "Advertise approved down payment amounts only. If missing, use Low Down Payment or Down Payment Options Available.",
-  financeDisclaimer: "WAC. Subject to approval of credit. Tax, title, license, and dealer fees may be additional.",
-  spanishGuidance: "Prefer adaptation over literal translation.",
-  targetAudienceNotes: "",
-};
-
-async function resolveClientId(supabase: any, clientId?: string | null) {
-  if (clientId && clientId !== "agency_overview") return clientId;
-  const { data, error } = await supabase
-    .from("dealerships")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) return null;
-  return data?.id || null;
-}
-
-async function loadBrandBrain(supabase: any, dealershipId: string | null) {
-  if (!dealershipId) return defaultBrain;
-  const { data, error } = await supabase
-    .from("client_brand_brains")
-    .select("*")
-    .eq("dealership_id", dealershipId)
-    .maybeSingle();
-
-  if (error || !data) return defaultBrain;
-
-  return {
-    toneEnglish: data.tone_english || defaultBrain.toneEnglish,
-    toneSpanish: data.tone_spanish || defaultBrain.toneSpanish,
-    approvedPhrases: data.approved_phrases || [],
-    bannedPhrases: data.banned_phrases || defaultBrain.bannedPhrases,
-    downPaymentRules: data.down_payment_rules || defaultBrain.downPaymentRules,
-    financeDisclaimer: data.finance_disclaimer || defaultBrain.financeDisclaimer,
-    spanishGuidance: data.spanish_guidance || defaultBrain.spanishGuidance,
-    targetAudienceNotes: data.target_audience_notes || "",
-  };
-}
-
-function cleanComplianceRisk(text: string) {
-  return text
-    .replace(/\bdrive\s+((?:a|an|this|the|our|your)\s+[^.!?\n]{0,80}?)\s+today\b/gi, "ask about $1 today")
-    .replace(/\bdrive\s+[^.!?\n]{0,80}?\s+home today\b/gi, "ask about availability today")
-    .replace(/\bfinance your new (car|truck|vehicle) today!?/gi, "Ask about financing options on this $1 today.")
-    .replace(/\bfinance your (car|truck|vehicle) today!?/gi, "Ask about financing options on this $1 today.")
-    .replace(/\bnew truck\b/gi, "next truck")
-    .replace(/\bnew car\b/gi, "next car")
-    .replace(/\bnew vehicle\b/gi, "next vehicle")
-    .replace(/\bstart driving your\b/gi, "ask about availability for this")
-    .replace(/\bstart driving this\b/gi, "ask about availability for this")
-    .replace(/\bstart making (?:weekly|monthly )?payments? today\b/gi, "ask about financing options today")
-    .replace(/\bbegin making (?:weekly|monthly )?payments? today\b/gi, "ask about financing options today")
-    .replace(/\btake it home today\b/gi, "ask about availability today")
-    .replace(/\bdrive it home today\b/gi, "ask about availability today")
-    .replace(/\bdescuento\b/gi, "enganche")
-    .replace(/\bbajada de precio\b/gi, "enganche")
-    .replace(/\bllev[aá]rtelo hoy\b/gi, "consulta disponibilidad hoy")
-    .replace(/\bpuedes llevar[^.!?\n]{0,80}casa hoy(?: mismo)?\b/gi, "consulta disponibilidad hoy")
-    .replace(/\bcomienza a hacer pagos hoy\b/gi, "consulta opciones de financiamiento")
-    .replace(/\bempezar a conducir\b/gi, "consultar disponibilidad")
-    .replace(/\bempieza a conducir\b/gi, "consulta disponibilidad")
-    .trim();
-}
+import { resolveDealershipId } from "@/lib/dealerships";
+import {
+  cleanComplianceRisk,
+  defaultBrandBrain,
+  loadBrandBrain,
+} from "@/features/ai/brand-brain";
 
 export async function POST(request: Request) {
   const supabase = getSupabaseAdmin();
@@ -95,8 +30,8 @@ export async function POST(request: Request) {
   const vTime = "Tue 5:30pm";
 
   try {
-    const finalDealershipId = supabase ? await resolveClientId(supabase, clientId) : null;
-    const brain = supabase ? await loadBrandBrain(supabase, finalDealershipId) : defaultBrain;
+    const finalDealershipId = supabase ? await resolveDealershipId(supabase, clientId) : null;
+    const brain = supabase ? await loadBrandBrain(supabase, finalDealershipId) : defaultBrandBrain;
 
     // Setup fallback copies in case Ollama is offline or experiences errors
     const fallbackCopy = isSms
@@ -195,10 +130,12 @@ Tone: ${tone}`;
         model: activeStatus.model || "llama3",
         target_type: "vehicle",
         target_id: vehicle?.id || null,
+        task_type: "marketing_draft",
         language,
         prompt_context: { templateId, systemPrompt, userPrompt },
-        copy_output: copyResult,
+        output: copyResult,
         status: "draft",
+        updated_at: new Date().toISOString(),
       });
     }
 

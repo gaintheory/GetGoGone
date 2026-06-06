@@ -108,6 +108,37 @@ Use this file to record major project choices so the product does not drift.
 - **Single-History Transaction Canvas Merge Hooks**: Engineered a batch addition hook (`addLayers`) inside `creative-builder.jsx` to batch-apply multi-layer presets, shapes layouts, text building blocks, and AI generated overlays in a single history transaction. This provides operators with a seamless single-click Undo/Redo experience across the entire sidebar designer workspace.
 - **Transparent Overlay Pack Template Extraction**: Upgraded `saveDesignerTemplate` to prompt operators for a template name (e.g. "Craigslist Special V2") and filter out all protected base layers (`protected: true`, background photo, background canvas) during compilation. This saves the custom overlays as a transparent "overlay pack" template which can be applied to any other lot vehicle, where base photos are automatically injected underneath via `ensurePhotoBase` on load.
 
+## Phase 0.1 — Site auth gate (2026-05-23)
+
+- Chose a single shared password over Google OAuth + per-user allowlist (Option 5 from earlier auth-options discussion). Rationale: solo operator use today with occasional owner peek; no per-user identity needed yet. Upgrade path is documented — swapping to Supabase Auth + Google OAuth + allowlist table later requires replacing only the login page and the middleware check; the signed-cookie helper survives the migration.
+- Implementation: HMAC-SHA256 signed `ggg_auth` cookie (Web Crypto API, constant-time comparison, 30-day expiry). Cookie is httpOnly, sameSite=lax, secure in production. Edge middleware gates every request; unauthenticated pages redirect to `/login?next=<original>`, unauthenticated API calls return 401.
+- Public prefixes whitelisted in middleware: `/v/*` (per-vehicle landing pages) and `/api/leads/inbound` (web inquiry endpoint). These must remain accessible without the cookie so web inquiry attribution can work end-to-end.
+- New env vars: `SITE_PASSWORD`, `SITE_AUTH_COOKIE_SECRET` (32-byte hex HMAC key), `PUBLIC_BASE_URL`.
+
+## Phase 0.2 — Demo theater eliminated, real Leads feature added (2026-05-23)
+
+Eight approved items shipped:
+
+1. **Calendar fake dates killed.** `getScheduledChannelsByDay()` no longer seeds fake `publishDueAt` values. Added `calendarCursor` state with prev/next/Today navigation for any month, not just May 2026.
+2. **Dashboard auto-seeder killed.** `loadCockpitData()` no longer injects 4-proposal seed block or history-badge auto-seed loop. New `scripts/seed-demo-proposals.mjs` is the manual path for demo data, using today's date in source keys for clean rerun dedupe.
+3. **Fake import log spam killed.** `src/prototype/screens/inventory.jsx` removed both setInterval log-spam blocks (ZIP and CSV) and the hardcoded `C:\Users\crypt\Desktop\getgogone\Inventory` default path. Replaced with real spinner + user-friendly copy.
+4. **Demo vehicle fallback removed.** 11 screen files replaced `providedVehicles.length ? providedVehicles : VEHICLES` with `providedVehicles || []`. Empty-state UI added to Inventory and Vehicle Detail. Hardcoded sidebar counts removed.
+5. **Real Leads feature built.** Lead capture + attribution is now live (see Data Model for schema detail). Attribution model: campaign save sets `destination_url` on each `campaign_channels` row to a UTM-tagged `/v/<vehicleId>` landing page URL. Web inquiries from that URL POST to `/api/leads/inbound` (public, whitelisted) and are stored with full attribution — `campaign_channel_id`, `source_channel`, `utm`, `inbound_url`, `inbound_ip`, `inbound_user_agent`. Operator-added leads (walk-in, phone, referral, manual) are created through the Leads UI without UTM. Activity timeline tracks notes, call attempts, status changes, appointments.
+6. **Reports placeholder banner added.** Amber "Sample data — not live metrics" banner added to `src/prototype/screens/reports.jsx`. Channel performance numbers remain placeholder until real publish events are wired.
+7. **Webhook fake fallback killed.** `/api/inventory/webhook/route.ts` no longer returns a hardcoded 2019 Jeep Wrangler. Missing `vehicleData` now returns 400.
+8. **Scheduler endpoint deleted.** `src/app/api/inventory/import/scheduler/route.ts` removed entirely. Publishing simulators deferred to Phase 0.3.
+
+## 2026-05-23 — Phase 3: helper consolidation
+
+Eliminated duplicated helpers across the API surface. Before this pass: 19 copies of the dealership-resolver function under 4 different names; 3 copies of the vehicle → prototype-shape mapper with one truncated/buggy; 5 files duplicating `cleanComplianceRisk` + `defaultBrain`; `palettes` + `normalizeBody` redefined in 4 files. After:
+
+1. **Vehicle mapper unified** in `src/features/inventory/prototype-adapter.ts` as `fromVehiclesTable` and `fromInspectionSource`. The cockpit's truncated `mapVehicleRow` was the worst offender — it dropped `images`, `photosList`, `features`, `notes`, which caused readiness logic to undercount photos. The unified mapper restores the full shape and **fixes the cockpit photo-count bug as a side effect**. `palettes` and `normalizeBody` are now exported from the adapter; the redundant `normalizeBodyStyle` in `vin-decode.ts` returns differently-cased strings ("Sedan" not "sedan") and was intentionally left alone.
+2. **`resolveDealershipId` shared** in `src/lib/dealerships.ts`. Replaces 19 copies. Added a companion `ensureDealershipId` for the 3 write-side routes (campaigns, creative-templates, brand-brain) that need to create-if-missing. Both throw on Supabase errors; the legacy copies were inconsistent (some swallowed, some threw). All call sites are inside try/catch — no behavior change.
+3. **`brand-brain` module created** at `src/features/ai/brand-brain.ts`. Exports `BrandBrain` type, `defaultBrandBrain` constant, `loadBrandBrain` (read-side, falls back to defaults on error), and `cleanComplianceRisk` (22-line regex sanitizer for FTC/Reg-Z compliance phrases in English + Spanish). 5 consumers consolidated: `generate-copy`, `messaging/draft`, `compliance-check`, `video/script`, and `agency/brand-brain` (write side untouched). **Side effect: `messaging/draft`'s old `defaultBrain` was missing `objectionHandlingNotes` — fixed by consolidation.**
+4. **Database types regenerated** with `npx supabase gen types typescript --linked`. `src/lib/database.types.ts` now reflects `lead_activities`, the seven new lead columns, and the allowed_users / agent_proposals state. 26 `(supabase as any)` casts remain in routes where genuinely-dynamic queries (JSONB metadata writes, complex joined selects) still fight TypeScript's inference. Reducing those further is type-discipline work for a later pass.
+
+Net file count: `src/lib/dealerships.ts` and `src/features/ai/brand-brain.ts` added; ~250 lines of duplicated code removed across 19 route files.
+
 
 
 

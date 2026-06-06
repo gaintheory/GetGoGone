@@ -5,7 +5,7 @@ import { UI } from '../ui';
 
 // Creative Builder — Right sidebar (layer settings, export, AI) — light theme
 
-function CBRightSidebar({ tab, onTab, selected, selectedId, layers, onSelect, onUpdateLayer, onDeleteLayer, onDuplicateLayer, onMoveLayer, onToggleLayerLock, sizeId, onSize, exportSizes, brand, onBrand, vars, onAI, onGenerateVariations, onSaveVersion, onExport }) {
+function CBRightSidebar({ tab, onTab, selected, selectedId, layers, onSelect, onUpdateLayer, onDeleteLayer, onDuplicateLayer, onMoveLayer, onToggleLayerLock, sizeId, onSize, exportSizes, brand, onBrand, vars, onAI, onGenerateVariations, onSaveVersion, onExport, onCollapse }) {
   const tabs = [
     { id: "layer", label: "Layer" },
     { id: "stack", label: "Stack" },
@@ -20,7 +20,7 @@ function CBRightSidebar({ tab, onTab, selected, selectedId, layers, onSelect, on
       overflow: "hidden",
       color: "var(--text)", fontSize: 12.5,
     }}>
-      <div style={{ display: "flex", borderBottom: "1px solid var(--border)" }}>
+      <div style={{ display: "flex", borderBottom: "1px solid var(--border)", alignItems: "center" }}>
         {tabs.map(t => (
           <button key={t.id} onClick={() => onTab(t.id)}
             style={{
@@ -33,6 +33,9 @@ function CBRightSidebar({ tab, onTab, selected, selectedId, layers, onSelect, on
             {t.label}
           </button>
         ))}
+        <button onClick={onCollapse} title="Collapse panel" style={{ border: "none", background: "transparent", padding: "0 10px", cursor: "pointer", color: "var(--text-2)", height: "100%", flexShrink: 0 }}>
+          <Icon.ChevronRight size={13}/>
+        </button>
       </div>
 
       <div style={{ overflow: "auto", padding: 14, flex: 1 }}>

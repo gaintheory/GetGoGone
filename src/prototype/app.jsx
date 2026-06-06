@@ -127,12 +127,12 @@ function App() {
     { id: "aiLibrary", label: "AI Library", icon: Icon.FileText },
     { id: "dashboard", label: "Dashboard", icon: Icon.Home },
     { id: "inventory", label: "Inventory", icon: Icon.Car, count: vehicles.length },
-    { id: "campaigns", label: "Campaigns", icon: Icon.Megaphone, count: 18 },
+    { id: "campaigns", label: "Campaigns", icon: Icon.Megaphone },
     { id: "packageBuilder", label: "Package Builder", icon: Icon.Folder },
     { id: "designer", label: "Designer", icon: Icon.Sparkles },
     { id: "videoStudio", label: "Video Studio", icon: Icon.Video },
     { id: "creatives", label: "Creatives", icon: Icon.Image },
-    { id: "leads", label: "Leads", icon: Icon.Inbox, count: 8, badge: true },
+    { id: "leads", label: "Leads", icon: Icon.Inbox },
     { id: "testdrive", label: "Test Drive", icon: Icon.Mic },
     { id: "marketing", label: "Marketing", icon: Icon.Send },
     { id: "reports", label: "Reports", icon: Icon.Chart },
@@ -155,9 +155,9 @@ function App() {
     creatives: () => <Creatives nav={nav} toast={showToast} vehicles={vehicles} clientId={activeClientId}/>,
     designer: () => <CreativeBuilder vehicleId={route.id} nav={nav} toast={showToast} vehicles={vehicles} clientId={activeClientId}/>,
     videoStudio: () => <VideoStudio nav={nav} toast={showToast} vehicles={vehicles} clientId={activeClientId}/>,
-    leads: () => <Leads nav={nav} toast={showToast}/>,
+    leads: () => <Leads nav={nav} toast={showToast} clientId={activeClientId} vehicles={vehicles}/>,
     testdrive: () => <TestDrive nav={nav} toast={showToast} vehicles={vehicles}/>,
-    marketing: () => <Marketing nav={nav} toast={showToast}/>,
+    marketing: () => <Marketing nav={nav} toast={showToast} vehicles={vehicles}/>,
     reports: () => <Reports nav={nav} clientId={activeClientId} toast={showToast}/>,
     settings: () => <Settings toast={showToast}/>,
   };
@@ -225,7 +225,20 @@ function App() {
           <div className="user-name">Ray Lawson</div>
             <div className="user-role">Agency operator</div>
           </div>
-          <button className="icon-btn" style={{ width: 26, height: 26 }}><Icon.ChevronDown size={13}/></button>
+          <button
+            className="icon-btn"
+            style={{ width: 26, height: 26 }}
+            title="Log out"
+            onClick={async () => {
+              try {
+                await fetch("/api/auth/logout", { method: "POST" });
+              } finally {
+                window.location.href = "/login";
+              }
+            }}
+          >
+            <Icon.LogOut size={13}/>
+          </button>
         </div>
       </aside>
 
@@ -383,6 +396,10 @@ function CampaignsList({ nav, clientId }) {
   const [error, setError] = React.useState(null);
   const [filter, setFilter] = React.useState("all");
   const [viewMode, setViewMode] = React.useState("list"); // "list" | "calendar"
+  const [calendarCursor, setCalendarCursor] = React.useState(() => {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() }; // month is 0-indexed
+  });
   const filters = ["all", "draft", "published", "paused", "archived"];
 
   React.useEffect(() => {
@@ -413,43 +430,51 @@ function CampaignsList({ nav, clientId }) {
 
   const filtered = filter === "all" ? campaigns : campaigns.filter(c => c.status === filter);
 
-  // Get scheduled channels mapped by day of May 2026
-  const getScheduledChannelsByDay = () => {
+  // Build a {dayNum -> [{campaign, channel}]} map for the cursor month using only
+  // real publishDueAt values stored on each channel's platform_payload.
+  const getScheduledChannelsByDay = (year, month /* 0-indexed */) => {
     const schedule = {};
-    let hasEvents = false;
+    const monthPrefix = `${year}-${String(month + 1).padStart(2, "0")}-`;
 
     campaigns.forEach(c => {
       (c.channels || []).forEach(ch => {
         const due = ch.platform_payload?.publishDueAt;
-        if (due && due.startsWith("2026-05-")) {
+        if (due && typeof due === "string" && due.startsWith(monthPrefix)) {
           const dayNum = parseInt(due.split("-")[2], 10);
           if (!isNaN(dayNum)) {
             if (!schedule[dayNum]) schedule[dayNum] = [];
             schedule[dayNum].push({ campaign: c, channel: ch });
-            hasEvents = true;
           }
         }
       });
     });
 
-    // Seed mock scheduled dates if none are dynamically found in campaign payload
-    if (!hasEvents && campaigns.length > 0) {
-      campaigns.forEach((c, idx) => {
-        (c.channels || []).forEach((ch, chIdx) => {
-          const dayNum = ((idx * 7 + chIdx * 3) % 28) + 1;
-          if (!schedule[dayNum]) schedule[dayNum] = [];
-          schedule[dayNum].push({ campaign: c, channel: ch });
-        });
-      });
-    }
-
     return schedule;
   };
 
   const renderCalendar = () => {
-    const days = [];
+    const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    
+    const { year, month } = calendarCursor;
+    const firstOfMonth = new Date(year, month, 1);
+    const leadingBlanks = firstOfMonth.getDay(); // 0 = Sun
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const scheduled = getScheduledChannelsByDay(year, month);
+    const totalScheduled = Object.values(scheduled).reduce((sum, items) => sum + items.length, 0);
+
+    const goPrevMonth = () => setCalendarCursor(c => {
+      const d = new Date(c.year, c.month - 1, 1);
+      return { year: d.getFullYear(), month: d.getMonth() };
+    });
+    const goNextMonth = () => setCalendarCursor(c => {
+      const d = new Date(c.year, c.month + 1, 1);
+      return { year: d.getFullYear(), month: d.getMonth() };
+    });
+    const goCurrentMonth = () => {
+      const now = new Date();
+      setCalendarCursor({ year: now.getFullYear(), month: now.getMonth() });
+    };
+
     const headers = weekdays.map(day => (
       <div key={day} style={{
         textAlign: "center", fontWeight: 700, fontSize: 10.5, color: "#94a3b8",
@@ -459,15 +484,13 @@ function CampaignsList({ nav, clientId }) {
       </div>
     ));
 
-    const scheduled = getScheduledChannelsByDay();
+    const days = [];
 
-    // 5 empty slots before Friday May 1st, 2026
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < leadingBlanks; i++) {
       days.push(<div key={`empty-${i}`} style={{ background: "rgba(15, 23, 42, 0.15)", border: "1px solid rgba(255,255,255,0.02)", minHeight: 90 }}/>);
     }
 
-    // 31 days in May
-    for (let day = 1; day <= 31; day++) {
+    for (let day = 1; day <= daysInMonth; day++) {
       const items = scheduled[day] || [];
       days.push(
         <div key={`day-${day}`} style={{
@@ -481,7 +504,7 @@ function CampaignsList({ nav, clientId }) {
           position: "relative"
         }}>
           <span style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8" }}>{day}</span>
-          
+
           <div style={{ display: "flex", flexDirection: "column", gap: 3, overflowY: "auto", flex: 1 }}>
             {items.map(({ campaign, channel }, itemIdx) => {
               const module = channelModules.find(m => m.id === channel.channel);
@@ -514,20 +537,54 @@ function CampaignsList({ nav, clientId }) {
       );
     }
 
-    // empty slots to round up grid to multiple of 7
-    const remaining = (5 + 31) % 7;
+    const remaining = (leadingBlanks + daysInMonth) % 7;
     if (remaining > 0) {
       for (let i = 0; i < (7 - remaining); i++) {
         days.push(<div key={`empty-end-${i}`} style={{ background: "rgba(15, 23, 42, 0.15)", border: "1px solid rgba(255,255,255,0.02)", minHeight: 90 }}/>);
       }
     }
 
+    const navBtnStyle = {
+      background: "rgba(15,23,42,0.5)",
+      border: "1px solid rgba(255,255,255,0.08)",
+      color: "#94a3b8",
+      borderRadius: 6,
+      padding: "4px 10px",
+      fontSize: 12,
+      cursor: "pointer",
+    };
+
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-          <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#38bdf8" }}>📆 MAY 2026 MARKETING CALENDAR</h3>
-          <span className="muted" style={{ fontSize: 11.5 }}>Click any scheduled channel pill to launch review package, download creatives, or verify posts.</span>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: "#38bdf8" }}>
+              📆 {monthNames[month].toUpperCase()} {year} MARKETING CALENDAR
+            </h3>
+            <span className="muted" style={{ fontSize: 11.5 }}>
+              {totalScheduled === 0
+                ? "No channels scheduled this month."
+                : `${totalScheduled} scheduled item${totalScheduled === 1 ? "" : "s"}.`}
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={goPrevMonth} style={navBtnStyle} title="Previous month">&larr;</button>
+            <button onClick={goCurrentMonth} style={navBtnStyle} title="Jump to current month">Today</button>
+            <button onClick={goNextMonth} style={navBtnStyle} title="Next month">&rarr;</button>
+          </div>
         </div>
+        {totalScheduled === 0 && (
+          <div style={{
+            padding: "8px 12px",
+            background: "rgba(56, 189, 248, 0.06)",
+            border: "1px solid rgba(56, 189, 248, 0.15)",
+            color: "rgba(226, 232, 240, 0.7)",
+            borderRadius: 8,
+            fontSize: 11.5,
+          }}>
+            Set a publish due date on a campaign channel and it&apos;ll appear here. Use &laquo; &raquo; to browse other months.
+          </div>
+        )}
         <div style={{
           display: "grid",
           gridTemplateColumns: "repeat(7, 1fr)",
@@ -1557,87 +1614,6 @@ function safeFileName(value) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80) || "getgogone";
-}
-
-function LegacyCampaignsList({ nav, vehicles: providedVehicles }) {
-  const { VEHICLES, CHANNELS, statusPill, fmt$ } = GGG;
-  const { Pill, Btn, VehicleThumb, ChannelBadge } = UI;
-  const vehicles = providedVehicles && providedVehicles.length ? providedVehicles : VEHICLES;
-  const campaigns = vehicles.flatMap(v => [
-    { id: v.id + "-1", v, name: `${v.year} ${v.make} ${v.model} — Fresh Arrival`, status: v.campaign, leads: v.leads, channels: ["fb","ig","cl"], spend: 42, created: "May 7" },
-  ]);
-  const [filter, setFilter] = React.useState("all");
-  const filters = ["all","Published","Ready to Review","Draft","Paused","Needs Refresh"];
-  const filtered = filter === "all" ? campaigns : campaigns.filter(c => c.status === filter);
-
-  return (
-    <div className="page">
-      <div className="page-h">
-        <div>
-          <h1>Campaigns</h1>
-          <div className="sub">{campaigns.length} total across all vehicles</div>
-        </div>
-        <div className="page-actions">
-          <Btn icon={Icon.Sparkles} variant="primary" onClick={() => nav("packageBuilder")}>New campaign</Btn>
-        </div>
-      </div>
-
-      <div style={{ display: "flex", gap: 4, marginBottom: 12 }}>
-        {filters.map(f => (
-          <button key={f} className={`chip ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>
-            {f === "all" ? "All" : f}
-            <span style={{ marginLeft: 4, color: filter === f ? "rgba(255,255,255,0.7)" : "var(--text-2)" }}>
-              {f === "all" ? campaigns.length : campaigns.filter(c => c.status === f).length}
-            </span>
-          </button>
-        ))}
-      </div>
-
-      <div className="card">
-        <table className="tbl">
-          <thead>
-            <tr>
-              <th>Campaign</th>
-              <th>Status</th>
-              <th>Channels</th>
-              <th>Leads</th>
-              <th>Spend</th>
-              <th>Created</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(c => (
-              <tr key={c.id} onClick={() => nav("builder", c.v.id)} style={{ cursor: "pointer" }}>
-                <td>
-                  <div className="row">
-                    <VehicleThumb v={c.v}/>
-                    <div>
-                      <div style={{ fontWeight: 600 }}>{c.name}</div>
-                      <div className="muted mono" style={{ fontSize: 11 }}>{c.v.stock}</div>
-                    </div>
-                  </div>
-                </td>
-                <td><Pill tone={statusPill(c.status)} dot>{c.status}</Pill></td>
-                <td>
-                  <div className="row" style={{ gap: 3 }}>
-                    {c.channels.map(id => {
-                      const ch = CHANNELS.find(x => x.id === id);
-                      return <ChannelBadge key={id} ch={ch} size={20}/>;
-                    })}
-                  </div>
-                </td>
-                <td className="mono" style={{ fontWeight: 600 }}>{c.leads}</td>
-                <td className="mono">${c.spend}</td>
-                <td className="muted">{c.created}</td>
-                <td><button className="icon-btn" style={{ width: 26, height: 26 }} onClick={(e) => e.stopPropagation()}><Icon.More size={14}/></button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
 }
 
 function ImportDrawer({ onClose, onDone }) {

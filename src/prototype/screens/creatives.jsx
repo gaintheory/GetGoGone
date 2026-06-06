@@ -7,7 +7,7 @@ import { VehicleMedia } from '../vehicle-media';
 function Creatives({ nav, toast, vehicles: providedVehicles, clientId }) {
   const { VEHICLES, fmt$ } = GGG;
   const { Pill, Btn } = UI;
-  const vehicles = providedVehicles && providedVehicles.length ? providedVehicles : VEHICLES;
+  const vehicles = providedVehicles || [];
   const [format, setFormat] = React.useState("all");
   const [vehicle, setVehicle] = React.useState("all");
   const [assets, setAssets] = React.useState([]);

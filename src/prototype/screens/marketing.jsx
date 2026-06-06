@@ -107,9 +107,9 @@ function previewTokens(text) {
     .replaceAll("{dealership_name}", "Wabash Auto");
 }
 
-function Marketing({ nav, toast }) {
+function Marketing({ nav, toast, vehicles: providedVehicles }) {
   const { Pill, Btn } = UI;
-  const { VEHICLES } = GGG;
+  const VEHICLES = providedVehicles || [];
   const [channel, setChannel] = React.useState("sms");
   const [templateId, setTemplateId] = React.useState("fresh");
   const [sms, setSms] = React.useState(MKT_TEMPLATES[0].sms);
@@ -118,17 +118,23 @@ function Marketing({ nav, toast }) {
   const [recipientId, setRecipientId] = React.useState("all");
   const [timing, setTiming] = React.useState("now"); // now | later
   const [frequency, setFrequency] = React.useState("one-time");
-  const [date, setDate] = React.useState("2026-05-22");
+  const [date, setDate] = React.useState(() => new Date().toISOString().slice(0, 10));
   const [time, setTime] = React.useState("10:00");
-  
+
   const [selectedVehicleId, setSelectedVehicleId] = React.useState(VEHICLES[0]?.id || "");
   const [targetLanguage, setTargetLanguage] = React.useState("en");
   const [generating, setGenerating] = React.useState(false);
 
+  React.useEffect(() => {
+    if (!selectedVehicleId && VEHICLES[0]?.id) {
+      setSelectedVehicleId(VEHICLES[0].id);
+    }
+  }, [VEHICLES, selectedVehicleId]);
+
   const template = MKT_TEMPLATES.find(t => t.id === templateId);
   const recipient = MKT_RECIPIENTS.find(r => r.id === recipientId);
-  
-  const activeVehicle = VEHICLES.find(v => v.id === selectedVehicleId) || VEHICLES[0];
+
+  const activeVehicle = VEHICLES.find(v => v.id === selectedVehicleId) || VEHICLES[0] || null;
   
   const previewTokens = (text) => {
     if (!text) return "";

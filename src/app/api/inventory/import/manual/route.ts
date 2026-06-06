@@ -1,19 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { resolveDealershipId } from "@/lib/dealerships";
 import { runImportPipeline } from "@/features/inventory/intake/pipeline";
 import type { VehicleImportRecord } from "@/features/inventory/intake/types";
-
-async function getFirstDealershipId(supabase: any): Promise<string | null> {
-  const { data, error } = await supabase
-    .from("dealerships")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) return null;
-  return data?.id || null;
-}
 
 export async function POST(request: Request) {
   const supabase = getSupabaseAdmin();
@@ -39,7 +28,7 @@ export async function POST(request: Request) {
   }
 
   if (!dealershipId) {
-    dealershipId = await getFirstDealershipId(supabase);
+    dealershipId = await resolveDealershipId(supabase);
     if (!dealershipId) {
       return NextResponse.json(
         { error: "No dealership found in the database. Please create one first." },

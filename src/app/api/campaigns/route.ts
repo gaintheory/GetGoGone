@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import type { Json, TablesInsert, TablesUpdate } from "@/lib/database.types";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { ensureDealershipId } from "@/lib/dealerships";
 
 type CampaignChannelPayload = {
   id: string;
@@ -127,43 +128,6 @@ function asYear(value: unknown): number | null {
   return year && year > 1900 ? Math.trunc(year) : null;
 }
 
-async function ensureDealership(
-  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
-  clientId?: string | null,
-) {
-  if (clientId) {
-    const { data: client, error: clientError } = await supabase
-      .from("dealerships")
-      .select("id")
-      .eq("id", clientId)
-      .maybeSingle();
-
-    if (clientError) throw clientError;
-    if (client?.id) return client.id;
-  }
-
-  const { data: existing, error: selectError } = await supabase
-    .from("dealerships")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (selectError) throw selectError;
-  if (existing?.id) return existing.id;
-
-  const { data: created, error: insertError } = await supabase
-    .from("dealerships")
-    .insert({
-      name: process.env.GETGOGONE_DEFAULT_DEALERSHIP_NAME || "Right Price Auto Sales",
-    })
-    .select("id")
-    .single();
-
-  if (insertError) throw insertError;
-  return created.id;
-}
-
 async function upsertVehicle(
   supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
   dealershipId: string,
@@ -231,7 +195,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const dealershipId = await ensureDealership(supabase, payload.clientId);
+    const dealershipId = await ensureDealershipId(supabase, payload.clientId);
     const vehicleId = await upsertVehicle(supabase, dealershipId, payload.vehicle);
     const vehicleName = [
       payload.vehicle.year,
@@ -284,6 +248,28 @@ export async function POST(request: Request) {
       .select("id, channel, status");
 
     if (channelsError) throw channelsError;
+
+    // Populate a UTM-tagged destination_url on each channel pointing at the
+    // public vehicle landing page. This is how inbound web inquiries get
+    // attributed to the right campaign + channel.
+    if (vehicleId && channels?.length) {
+      const baseUrl = (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
+      await Promise.all(channels.map(async (ch) => {
+        const params = new URLSearchParams({
+          ch: ch.channel,
+          c: campaign.id,
+          cc: ch.id,
+          utm_source: ch.channel,
+          utm_medium: ch.channel.includes("paid") ? "paid" : "organic",
+          utm_campaign: campaign.id,
+        });
+        const destinationUrl = `${baseUrl || ""}/v/${vehicleId}?${params.toString()}`;
+        await supabase
+          .from("campaign_channels")
+          .update({ destination_url: destinationUrl })
+          .eq("id", ch.id);
+      }));
+    }
 
     return NextResponse.json({
       ok: true,

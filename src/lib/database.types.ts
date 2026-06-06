@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -39,6 +39,130 @@ export type Database = {
   }
   public: {
     Tables: {
+      agent_proposals: {
+        Row: {
+          agent_type: string
+          campaign_channel_id: string | null
+          campaign_id: string | null
+          created_at: string
+          created_by: string | null
+          dealership_id: string
+          decided_at: string | null
+          generated_output_id: string | null
+          id: string
+          proposal_type: string
+          proposed_payload: Json
+          reasoning: string | null
+          review_notes: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          risk_level: string
+          snoozed_until: string | null
+          source_key: string
+          status: string
+          summary: string | null
+          target_id: string
+          target_type: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          agent_type?: string
+          campaign_channel_id?: string | null
+          campaign_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          dealership_id: string
+          decided_at?: string | null
+          generated_output_id?: string | null
+          id?: string
+          proposal_type: string
+          proposed_payload?: Json
+          reasoning?: string | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          risk_level?: string
+          snoozed_until?: string | null
+          source_key: string
+          status?: string
+          summary?: string | null
+          target_id: string
+          target_type: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          agent_type?: string
+          campaign_channel_id?: string | null
+          campaign_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          dealership_id?: string
+          decided_at?: string | null
+          generated_output_id?: string | null
+          id?: string
+          proposal_type?: string
+          proposed_payload?: Json
+          reasoning?: string | null
+          review_notes?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          risk_level?: string
+          snoozed_until?: string | null
+          source_key?: string
+          status?: string
+          summary?: string | null
+          target_id?: string
+          target_type?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_proposals_campaign_channel_id_fkey"
+            columns: ["campaign_channel_id"]
+            isOneToOne: false
+            referencedRelation: "campaign_channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_proposals_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_proposals_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_proposals_dealership_id_fkey"
+            columns: ["dealership_id"]
+            isOneToOne: false
+            referencedRelation: "dealerships"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_proposals_generated_output_id_fkey"
+            columns: ["generated_output_id"]
+            isOneToOne: false
+            referencedRelation: "generated_outputs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "agent_proposals_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       audit_log: {
         Row: {
           action: string
@@ -289,6 +413,65 @@ export type Database = {
           },
         ]
       }
+      client_brand_brains: {
+        Row: {
+          approved_phrases: string[]
+          banned_phrases: string[]
+          created_at: string
+          dealership_id: string
+          down_payment_rules: string
+          finance_disclaimer: string
+          id: string
+          objection_handling_notes: string | null
+          platform_rules: Json
+          spanish_guidance: string
+          target_audience_notes: string | null
+          tone_english: string
+          tone_spanish: string
+          updated_at: string
+        }
+        Insert: {
+          approved_phrases?: string[]
+          banned_phrases?: string[]
+          created_at?: string
+          dealership_id: string
+          down_payment_rules?: string
+          finance_disclaimer?: string
+          id?: string
+          objection_handling_notes?: string | null
+          platform_rules?: Json
+          spanish_guidance?: string
+          target_audience_notes?: string | null
+          tone_english?: string
+          tone_spanish?: string
+          updated_at?: string
+        }
+        Update: {
+          approved_phrases?: string[]
+          banned_phrases?: string[]
+          created_at?: string
+          dealership_id?: string
+          down_payment_rules?: string
+          finance_disclaimer?: string
+          id?: string
+          objection_handling_notes?: string | null
+          platform_rules?: Json
+          spanish_guidance?: string
+          target_audience_notes?: string | null
+          tone_english?: string
+          tone_spanish?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_brand_brains_dealership_id_fkey"
+            columns: ["dealership_id"]
+            isOneToOne: true
+            referencedRelation: "dealerships"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       creative_templates: {
         Row: {
           canvas_json: Json
@@ -442,6 +625,130 @@ export type Database = {
         }
         Relationships: []
       }
+      generated_output_events: {
+        Row: {
+          actor_type: string
+          created_at: string
+          dealership_id: string | null
+          event_type: string
+          generated_output_id: string | null
+          id: string
+          metadata: Json
+          note: string | null
+        }
+        Insert: {
+          actor_type?: string
+          created_at?: string
+          dealership_id?: string | null
+          event_type: string
+          generated_output_id?: string | null
+          id?: string
+          metadata?: Json
+          note?: string | null
+        }
+        Update: {
+          actor_type?: string
+          created_at?: string
+          dealership_id?: string | null
+          event_type?: string
+          generated_output_id?: string | null
+          id?: string
+          metadata?: Json
+          note?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generated_output_events_dealership_id_fkey"
+            columns: ["dealership_id"]
+            isOneToOne: false
+            referencedRelation: "dealerships"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "generated_output_events_generated_output_id_fkey"
+            columns: ["generated_output_id"]
+            isOneToOne: false
+            referencedRelation: "generated_outputs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      generated_outputs: {
+        Row: {
+          campaign_id: string | null
+          created_at: string
+          dealership_id: string
+          id: string
+          language: string
+          model: string
+          output: Json
+          prompt_context: Json
+          provider: string
+          status: string
+          target_id: string | null
+          target_type: string
+          task_type: string
+          updated_at: string
+          vehicle_id: string | null
+        }
+        Insert: {
+          campaign_id?: string | null
+          created_at?: string
+          dealership_id: string
+          id?: string
+          language?: string
+          model: string
+          output?: Json
+          prompt_context?: Json
+          provider: string
+          status?: string
+          target_id?: string | null
+          target_type: string
+          task_type: string
+          updated_at?: string
+          vehicle_id?: string | null
+        }
+        Update: {
+          campaign_id?: string | null
+          created_at?: string
+          dealership_id?: string
+          id?: string
+          language?: string
+          model?: string
+          output?: Json
+          prompt_context?: Json
+          provider?: string
+          status?: string
+          target_id?: string | null
+          target_type?: string
+          task_type?: string
+          updated_at?: string
+          vehicle_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generated_outputs_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "generated_outputs_dealership_id_fkey"
+            columns: ["dealership_id"]
+            isOneToOne: false
+            referencedRelation: "dealerships"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "generated_outputs_vehicle_id_fkey"
+            columns: ["vehicle_id"]
+            isOneToOne: false
+            referencedRelation: "vehicles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inspections: {
         Row: {
           body: string | null
@@ -555,6 +862,57 @@ export type Database = {
           },
         ]
       }
+      lead_activities: {
+        Row: {
+          activity_type: string
+          actor: string | null
+          body: string | null
+          created_at: string
+          dealership_id: string
+          id: string
+          lead_id: string
+          metadata: Json
+          occurred_at: string
+        }
+        Insert: {
+          activity_type: string
+          actor?: string | null
+          body?: string | null
+          created_at?: string
+          dealership_id: string
+          id?: string
+          lead_id: string
+          metadata?: Json
+          occurred_at?: string
+        }
+        Update: {
+          activity_type?: string
+          actor?: string | null
+          body?: string | null
+          created_at?: string
+          dealership_id?: string
+          id?: string
+          lead_id?: string
+          metadata?: Json
+          occurred_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lead_activities_dealership_id_fkey"
+            columns: ["dealership_id"]
+            isOneToOne: false
+            referencedRelation: "dealerships"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lead_activities_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lead_events: {
         Row: {
           channel: string | null
@@ -607,6 +965,7 @@ export type Database = {
         Row: {
           appointment_at: string | null
           assigned_to: string | null
+          campaign_channel_id: string | null
           campaign_id: string | null
           created_at: string
           dealership_id: string
@@ -614,22 +973,29 @@ export type Database = {
           email: string | null
           first_name: string | null
           id: string
+          inbound_ip: string | null
+          inbound_url: string | null
+          inbound_user_agent: string | null
           language_preference: string
           last_contacted_at: string | null
           last_name: string | null
+          notes: string | null
           phone: string | null
           preferred_contact: string | null
           source: string | null
+          source_channel: string | null
           source_lead_id: string | null
           source_system: string | null
           status: string
           trade_in: boolean | null
           updated_at: string
+          utm: Json
           vehicle_id: string | null
         }
         Insert: {
           appointment_at?: string | null
           assigned_to?: string | null
+          campaign_channel_id?: string | null
           campaign_id?: string | null
           created_at?: string
           dealership_id: string
@@ -637,22 +1003,29 @@ export type Database = {
           email?: string | null
           first_name?: string | null
           id?: string
+          inbound_ip?: string | null
+          inbound_url?: string | null
+          inbound_user_agent?: string | null
           language_preference?: string
           last_contacted_at?: string | null
           last_name?: string | null
+          notes?: string | null
           phone?: string | null
           preferred_contact?: string | null
           source?: string | null
+          source_channel?: string | null
           source_lead_id?: string | null
           source_system?: string | null
           status?: string
           trade_in?: boolean | null
           updated_at?: string
+          utm?: Json
           vehicle_id?: string | null
         }
         Update: {
           appointment_at?: string | null
           assigned_to?: string | null
+          campaign_channel_id?: string | null
           campaign_id?: string | null
           created_at?: string
           dealership_id?: string
@@ -660,17 +1033,23 @@ export type Database = {
           email?: string | null
           first_name?: string | null
           id?: string
+          inbound_ip?: string | null
+          inbound_url?: string | null
+          inbound_user_agent?: string | null
           language_preference?: string
           last_contacted_at?: string | null
           last_name?: string | null
+          notes?: string | null
           phone?: string | null
           preferred_contact?: string | null
           source?: string | null
+          source_channel?: string | null
           source_lead_id?: string | null
           source_system?: string | null
           status?: string
           trade_in?: boolean | null
           updated_at?: string
+          utm?: Json
           vehicle_id?: string | null
         }
         Relationships: [
@@ -679,6 +1058,13 @@ export type Database = {
             columns: ["assigned_to"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "leads_campaign_channel_id_fkey"
+            columns: ["campaign_channel_id"]
+            isOneToOne: false
+            referencedRelation: "campaign_channels"
             referencedColumns: ["id"]
           },
           {

@@ -44,3 +44,20 @@ Template import belongs inside Designer. Supported source categories are GetGoGo
 
 Designer persistence direction:
 Designer templates and creative versions must be recoverable after save. A saved template is a reusable overlay starting point inside Designer. A saved creative is a finished/editable version that appears in Designer's Saved panel and the Creatives asset library. Rendered image export and campaign attachment are separate follow-up capabilities.
+
+## Lead capture & attribution (added Phase 0.2)
+
+In scope as of Phase 0.2:
+- **Operator-added leads** — walk-ins, phone inquiries, referrals, and manual entries created directly in the Leads screen. Source is set by the operator at creation time.
+- **Web inquiry forms** — public per-vehicle landing pages (`/v/[vehicleId]`) with an inquiry form. Auto-attribute the lead to the exact campaign + channel that drove the click via UTM-tagged `destination_url` set on each `campaign_channels` row at campaign save time.
+- **Lead activity timeline** — notes, call attempts, status changes, and appointments tracked on each lead.
+- **Status filter UI** — operator sees leads bucketed by status (new, contacted, appointment, sold, lost) with live counts.
+
+Out of scope until later phases:
+- Real SMS and email send from the Leads screen (Phase 0.3+).
+- Automated lead routing or salesperson assignment.
+- Real publish events feeding channel performance metrics in Reports (still placeholder banners as of Phase 0.2).
+
+## Site auth gate (added Phase 0.1)
+
+A single shared-password auth gate is active site-wide. All routes require a valid signed cookie except: `/login`, `/v/*` (public vehicle landing pages), `/api/leads/inbound` (public inquiry endpoint), and static assets. See `docs/ARCHITECTURE.md` — Authentication for implementation details.

@@ -280,3 +280,50 @@ AI Library writes events for operator decisions such as rejection and send-back-
 
 RLS posture:
 The new GetGoGone tables enable Row Level Security, but detailed policies are intentionally deferred until auth and dealership membership rules are implemented. Server-side/service-role operations can be used during controlled setup and imports.
+
+## Leads schema extension
+
+Migration: `supabase/migrations/20260523230436_leads.sql`
+
+The pre-existing `leads` table from the core migration is kept intact. This migration extends it with attribution and inbound web inquiry columns:
+
+New columns on `leads`:
+- `campaign_channel_id uuid` — channel-level attribution FK to `campaign_channels` (nullable; set for web inquiries only)
+- `source_channel text` — structured channel slug (e.g. `facebook_organic`, `craigslist`)
+- `utm jsonb` — raw UTM params captured from the inbound inquiry URL
+- `inbound_url text` — full landing page URL the prospect arrived on
+- `inbound_ip text` — requester IP from the inbound inquiry POST
+- `inbound_user_agent text` — requester user-agent from the inbound inquiry POST
+- `notes text` — operator notes on the lead
+
+New constraint on `leads`:
+- `leads_status_check`: status must be one of `('new', 'contacted', 'appointment', 'sold', 'lost')`
+
+## lead_activities table
+
+Added by the same `20260523230436_leads.sql` migration. RLS enabled.
+
+Purpose: immutable activity timeline per lead. Every interaction logged here; the lead row holds only the latest state.
+
+Columns:
+- `id uuid` — primary key
+- `lead_id uuid` — FK to `leads`
+- `dealership_id uuid` — FK to `dealerships` (for client scoping)
+- `activity_type text` — type of activity
+- `body text` — human-readable activity text or note content
+- `metadata jsonb` — structured payload for the activity type
+- `actor text` — who performed the action (operator identifier or `"system"`)
+- `occurred_at timestamptz` — when the activity happened
+- `created_at timestamptz` — row creation timestamp
+
+Common `activity_type` values:
+- `note` — operator free-text note
+- `call_attempt` — outbound call dialed (not necessarily connected)
+- `call_connected` — connected conversation
+- `sms_sent` — outbound SMS sent
+- `email_sent` — outbound email sent
+- `appointment_scheduled` — appointment booked
+- `status_change` — lead status updated (old/new status in `metadata`)
+- `viewed_vehicle` — prospect viewed the vehicle landing page
+
+`PATCH /api/leads` (status update) automatically creates a `status_change` activity row. `POST /api/leads/activities` creates any other activity type and sets `leads.last_contacted_at` for outbound activity types.

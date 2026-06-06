@@ -7,7 +7,7 @@ import { assessVehicleReadiness } from '../../features/inventory/readiness';
 function VideoStudio({ nav, toast, vehicles: providedVehicles, clientId }) {
   const { VEHICLES, fmt$, fmtMi } = GGG;
   const { Pill, Btn, VehicleThumb } = UI;
-  const vehicles = providedVehicles && providedVehicles.length ? providedVehicles : VEHICLES;
+  const vehicles = providedVehicles || [];
 
   // Parameters State
   const [vehicleId, setVehicleId] = React.useState(vehicles[0]?.id || "");

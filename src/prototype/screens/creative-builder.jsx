@@ -6,7 +6,6 @@ import { CreativeBuilderData } from './creative-templates';
 import { CBCanvas } from './creative-canvas';
 import { CBLeftSidebar } from './creative-left';
 import { CBRightSidebar } from './creative-right';
-import { renderCreativePng } from './creative-export';
 
 const photoBaseLayers = [
   { id: "bg", type: "bg", color: "#FFFFFF", locked: true, protected: true },
@@ -19,9 +18,9 @@ function CreativeBuilder({ vehicleId, nav, toast, vehicles: providedVehicles, cl
   const { VEHICLES, vehicleSvg } = GGG;
   const { adTemplates, exportSizes, buildVars, substitute, defaultBrand } = CreativeBuilderData;
   const { Pill, Btn, VehicleThumb } = UI;
-  const vehicles = providedVehicles && providedVehicles.length ? providedVehicles : VEHICLES;
+  const vehicles = providedVehicles || [];
 
-  const [vehicleSel, setVehicleSel] = React.useState(vehicles.find(v => v.id === vehicleId) || vehicles[1] || vehicles[0] || VEHICLES[1]);
+  const [vehicleSel, setVehicleSel] = React.useState(vehicles.find(v => v.id === vehicleId) || vehicles[1] || vehicles[0] || null);
   const [templateId, setTemplateId] = React.useState("fresh");
   const [sizeId, setSizeId] = React.useState("fb-sq");
   const [layers, setLayers] = React.useState(() => ensurePhotoBase(adTemplates[0].layers));
@@ -37,6 +36,9 @@ function CreativeBuilder({ vehicleId, nav, toast, vehicles: providedVehicles, cl
   const [previewMode, setPreviewMode] = React.useState(false);
   const canvasAreaRef = React.useRef(null);
   const [areaSize, setAreaSize] = React.useState({ w: 800, h: 600 });
+  const stageRef = React.useRef(null);
+  const [leftCollapsed, setLeftCollapsed] = React.useState(false);
+  const [rightCollapsed, setRightCollapsed] = React.useState(false);
   const layersRef = React.useRef(layers);
   layersRef.current = layers;
   const lastSnapshotAt = React.useRef(0);
@@ -323,42 +325,34 @@ function CreativeBuilder({ vehicleId, nav, toast, vehicles: providedVehicles, cl
   };
 
   const exportPng = async () => {
-    if (exportingCreative) return;
-    setExportingCreative(true);
+    if (exportingCreative || savingCreative) return;
+    if (stageRef.current) {
+      setExportingCreative(true);
+      try {
+        const dataURL = stageRef.current.toDataURL({ pixelRatio: 1 });
+        const link = document.createElement('a');
+        const name = [vehicleSel?.year, vehicleSel?.make, vehicleSel?.model].filter(Boolean).join('-') || 'creative';
+        link.download = `${name}-${size.id}.png`;
+        link.href = dataURL;
+        link.click();
+        toast("PNG exported");
+      } catch {
+        toast("Export failed");
+      } finally {
+        setExportingCreative(false);
+      }
+      return;
+    }
+    // fallback: save as version
+    setSavingCreative(true);
     try {
       const saved = await postCreativeTemplate(buildCreativePayload("saved_creative"));
       setVersions(prev => [mapSavedCreative(saved), ...prev].slice(0, 20));
-      const dataUrl = await renderCreativePng({ layers, size, vars, vehicle: vehicleSel, brand });
-      const fileName = `${saved.name || "designer-creative"}-${size.id}`;
-      const response = await fetch("/api/creative-exports", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clientId: clientId && clientId !== "agency_overview" ? clientId : undefined,
-          creativeTemplateId: saved.id,
-          imageDataUrl: dataUrl,
-          fileName,
-          format: size.id,
-          metadata: {
-            size,
-            vehicle: vehicleSel,
-            templateId,
-            templateName: template?.name || "Blank Overlay",
-          },
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok || !data.ok) throw new Error(data.error || "Export failed.");
-
-      const link = document.createElement("a");
-      link.href = dataUrl;
-      link.download = `${fileName.replace(/[^a-z0-9._-]+/gi, "-")}.png`;
-      link.click();
-      toast("Exported PNG and saved storage preview");
+      toast("Saved as a version");
     } catch (error) {
-      toast(error.message || "Creative export failed");
+      toast(error.message || "Could not save creative version");
     } finally {
-      setExportingCreative(false);
+      setSavingCreative(false);
     }
   };
 
@@ -449,7 +443,7 @@ function CreativeBuilder({ vehicleId, nav, toast, vehicles: providedVehicles, cl
         exportSizes={exportSizes}
       />
 
-      <div style={{ display: "grid", gridTemplateColumns: previewMode ? "1fr" : "260px 1fr 300px", overflow: "hidden" }}>
+      <div style={{ display: "grid", gridTemplateColumns: previewMode ? "1fr" : `${leftCollapsed ? "56px" : "260px"} 1fr ${rightCollapsed ? "0px" : "300px"}`, overflow: "hidden", transition: "grid-template-columns 0.18s ease" }}>
         {!previewMode && (
           <CBLeftSidebar
             tab={leftTab} onTab={setLeftTab}
@@ -464,6 +458,9 @@ function CreativeBuilder({ vehicleId, nav, toast, vehicles: providedVehicles, cl
             onLoadVersion={loadSavedCreative}
             toast={toast}
             clientId={clientId}
+            collapsed={leftCollapsed}
+            onToggleCollapse={() => setLeftCollapsed(c => !c)}
+            canvasSize={size}
           />
         )}
 
@@ -488,6 +485,7 @@ function CreativeBuilder({ vehicleId, nav, toast, vehicles: providedVehicles, cl
             onSnapshot={snapshot}
             scale={scale}
             interactive={!previewMode}
+            stageRef={stageRef}
           />
           {/* Bottom overlay info */}
           <div style={{
@@ -524,11 +522,27 @@ function CreativeBuilder({ vehicleId, nav, toast, vehicles: providedVehicles, cl
               </button>
             </div>
           )}
+          {!previewMode && rightCollapsed && (
+            <button
+              onClick={() => setRightCollapsed(false)}
+              style={{
+                position: "absolute", top: 12, right: 0,
+                background: "var(--surface)", border: "1px solid var(--border)",
+                borderRight: "none", borderRadius: "4px 0 0 4px",
+                padding: "6px 8px", cursor: "pointer", color: "var(--text-2)",
+                boxShadow: "var(--shadow-sm)",
+              }}
+              title="Show properties panel"
+            >
+              <Icon.ChevronLeft size={13}/>
+            </button>
+          )}
         </div>
 
-        {!previewMode && (
+        {!previewMode && !rightCollapsed && (
           <CBRightSidebar
             tab={rightTab} onTab={setRightTab}
+            onCollapse={() => setRightCollapsed(true)}
             selected={selected}
             selectedId={selectedId}
             layers={layers}

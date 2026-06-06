@@ -1,55 +1,14 @@
 import { NextResponse } from "next/server";
 
-import { mapSourceVehicleToPrototypeVehicle } from "@/features/inventory/prototype-adapter";
-import { getLocalVehicleImageMap } from "@/features/inventory/local-images";
+import {
+  fromInspectionSource,
+  fromVehiclesTable,
+  type VehicleRowWithPhotos,
+} from "@/features/inventory/prototype-adapter";
 import { assessVehicleReadiness } from "@/features/inventory/readiness";
 import { topRecommendedChannelIds } from "@/features/campaigns/recommendations";
-import type { Tables } from "@/lib/database.types";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-
-type VehicleRow = Tables<"vehicles">;
-
-const palettes: Record<string, string[]> = {
-  sedan: ["#64748b", "#334155", "#cbd5e1"],
-  truck: ["#1e293b", "#0f172a", "#cbd5e1"],
-  suv: ["#0f766e", "#0f172a", "#cbd5e1"],
-  van: ["#475569", "#1e293b", "#cbd5e1"],
-};
-
-function normalizeBody(body?: string | null): string {
-  const value = (body || "").toLowerCase();
-  if (value.includes("truck") || value.includes("pickup")) return "truck";
-  if (value.includes("suv") || value.includes("utility")) return "suv";
-  if (value.includes("van")) return "van";
-  return "sedan";
-}
-
-function mapVehicleRow(row: VehicleRow) {
-  const body = normalizeBody(row.body_style);
-  const imageUrl = getLocalVehicleImageMap().get(row.vin.toUpperCase()) || null;
-
-  return {
-    id: row.id,
-    stock: row.stock_number || row.source_record_id || "INV",
-    year: row.year || "",
-    make: row.make || "Unknown",
-    model: row.model || "Vehicle",
-    trim: row.trim || "",
-    body,
-    price: row.price || 0,
-    down: row.down_payment || 0,
-    mileage: row.mileage || 0,
-    vin: row.vin,
-    photos: imageUrl ? 1 : 0,
-    imageUrl,
-    sourceUrl: row.source_url,
-    status: row.status,
-    campaign: "Draft",
-    palette: palettes[body],
-    sourceSystem: row.source_system || "getgogone_vehicles",
-    sourceRecordId: row.source_record_id,
-  };
-}
+import { resolveDealershipId } from "@/lib/dealerships";
 
 function vehicleName(vehicle: { year?: string | number; make?: string; model?: string; trim?: string }) {
   return [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(" ");
@@ -65,23 +24,11 @@ function titleCase(value: string) {
   return String(value || "").replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-async function firstDealershipId(supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>) {
-  const { data, error } = await supabase
-    .from("dealerships")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data?.id || null;
-}
-
 async function loadVehicles(
   supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
   clientId: string | null,
 ) {
-  const defaultClientId = await firstDealershipId(supabase);
+  const defaultClientId = await resolveDealershipId(supabase, null);
 
   if (!clientId || clientId === defaultClientId) {
     const { data, error } = await supabase
@@ -92,13 +39,20 @@ async function loadVehicles(
     if (error) throw error;
     return {
       defaultClientId,
-      vehicles: (data || []).map(mapSourceVehicleToPrototypeVehicle),
+      vehicles: (data || []).map(fromInspectionSource),
     };
   }
 
   const { data, error } = await supabase
     .from("vehicles")
-    .select("*")
+    .select(`
+      *,
+      vehicle_photos (
+        storage_path,
+        is_primary,
+        position
+      )
+    `)
     .eq("dealership_id", clientId)
     .neq("status", "archived")
     .order("updated_at", { ascending: false });
@@ -106,7 +60,7 @@ async function loadVehicles(
   if (error) throw error;
   return {
     defaultClientId,
-    vehicles: (data || []).map(mapVehicleRow),
+    vehicles: (data as VehicleRowWithPhotos[] || []).map(fromVehiclesTable),
   };
 }
 

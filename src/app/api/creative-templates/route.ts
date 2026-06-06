@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import type { Json, TablesInsert } from "@/lib/database.types";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { ensureDealershipId } from "@/lib/dealerships";
 
 type CreativeTemplatePayload = {
   clientId?: string;
@@ -13,43 +14,6 @@ type CreativeTemplatePayload = {
   previewUrl?: string | null;
   isSystem?: boolean;
 };
-
-async function ensureDealership(
-  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
-  clientId?: string | null,
-) {
-  if (clientId) {
-    const { data: client, error: clientError } = await supabase
-      .from("dealerships")
-      .select("id")
-      .eq("id", clientId)
-      .maybeSingle();
-
-    if (clientError) throw clientError;
-    if (client?.id) return client.id;
-  }
-
-  const { data: existing, error: selectError } = await supabase
-    .from("dealerships")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (selectError) throw selectError;
-  if (existing?.id) return existing.id;
-
-  const { data: created, error: insertError } = await supabase
-    .from("dealerships")
-    .insert({
-      name: process.env.GETGOGONE_DEFAULT_DEALERSHIP_NAME || "Right Price Auto Sales",
-    })
-    .select("id")
-    .single();
-
-  if (insertError) throw insertError;
-  return created.id;
-}
 
 export async function GET(request: Request) {
   const supabase = getSupabaseAdmin();
@@ -109,7 +73,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const dealershipId = await ensureDealership(supabase, payload.clientId);
+    const dealershipId = await ensureDealershipId(supabase, payload.clientId);
     const row: TablesInsert<"creative_templates"> = {
       dealership_id: dealershipId,
       name: payload.name.trim(),

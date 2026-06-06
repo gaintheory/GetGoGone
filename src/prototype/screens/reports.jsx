@@ -153,8 +153,7 @@ function Reports({ nav, clientId, toast }) {
 
   // Find slow-moving vehicles for Closed-Loop Opportunity Scorer
   const getOpportunities = () => {
-    // Merge database inventory and falling back to data module
-    const list = dbVehicles.length > 0 ? dbVehicles : VEHICLES;
+    const list = dbVehicles;
     
     return list.map((v, index) => {
       // Calculate/seed high-fidelity inventory age (days on lot)
@@ -274,6 +273,24 @@ function Reports({ nav, clientId, toast }) {
           <Btn icon={Icon.FileText} onClick={() => setMetricModal(true)}>📝 Enter Metrics</Btn>
           <Btn icon={Icon.Download} onClick={() => setPdfModal(true)}>Export PDF Report</Btn>
         </div>
+      </div>
+
+      <div style={{
+        padding: "8px 12px",
+        marginBottom: 12,
+        borderRadius: 8,
+        background: "rgba(245, 158, 11, 0.08)",
+        border: "1px solid rgba(245, 158, 11, 0.25)",
+        color: "#fbbf24",
+        fontSize: 11.5,
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+      }}>
+        <Icon.AlertTriangle size={13}/>
+        <span>
+          <strong>Sample data — not live metrics.</strong> Channel performance numbers below are placeholders until real publish events are wired up. Use <em>Enter Metrics</em> to override per campaign.
+        </span>
       </div>
 
       {loading ? (

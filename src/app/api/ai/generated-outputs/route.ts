@@ -1,23 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-
-async function resolveClientId(
-  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
-  clientId?: string | null,
-) {
-  if (clientId && clientId !== "agency_overview") return clientId;
-
-  const { data, error } = await supabase
-    .from("dealerships")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data?.id || null;
-}
+import { resolveDealershipId } from "@/lib/dealerships";
 
 export async function GET(request: Request) {
   const supabase = getSupabaseAdmin();
@@ -37,7 +21,7 @@ export async function GET(request: Request) {
   const limit = Math.min(Number(searchParams.get("limit") || 50), 100);
 
   try {
-    const dealershipId = await resolveClientId(supabase, clientId);
+    const dealershipId = await resolveDealershipId(supabase, clientId);
     if (!dealershipId) return NextResponse.json({ ok: true, outputs: [] });
 
     let query = (supabase as any)

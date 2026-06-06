@@ -7,11 +7,25 @@ import { VehicleMedia } from '../vehicle-media';
 function VehicleDetail({ vehicleId, nav, vehicles: providedVehicles, toast, onReload }) {
   const { VEHICLES, LEADS, fmt$, fmtMi, statusPill, vehicleSvg } = GGG;
   const { Pill, Btn, VehicleThumb, Tabs } = UI;
-  const vehicles = providedVehicles && providedVehicles.length ? providedVehicles : VEHICLES;
-  const v = vehicles.find(x => x.id === vehicleId) || vehicles[0] || VEHICLES[0];
+  const vehicles = providedVehicles || [];
+  const v = vehicles.find(x => x.id === vehicleId) || vehicles[0] || null;
   const [tab, setTab] = React.useState("overview");
   const [photoIdx, setPhotoIdx] = React.useState(0);
-  const leads = LEADS.filter(l => l.vid === v.id);
+  const leads = v ? LEADS.filter(l => l.vid === v.id) : [];
+
+  if (!v) {
+    return (
+      <div className="page">
+        <div className="page-h">
+          <div>
+            <h1>Vehicle not found</h1>
+            <div className="sub">This vehicle is not in the current inventory.</div>
+          </div>
+          <Btn icon={Icon.ChevronLeft} onClick={() => nav("inventory")}>Back to inventory</Btn>
+        </div>
+      </div>
+    );
+  }
 
   const archiveVehicle = async (vehicleId) => {
     if (!window.confirm("Are you sure you want to archive this vehicle? It will be hidden from active inventory and cockpit recommendations, but kept in database records.")) return;

@@ -1,353 +1,538 @@
 import React from 'react';
-import { Icon } from '../icons';
-import { GGG } from '../data';
-import { UI } from '../ui';
+import { Stage, Layer, Rect, Text, Group, Image as KImage, Transformer, Shape, Circle } from 'react-konva';
 import { CreativeBuilderData } from './creative-templates';
-import { VehicleMedia } from '../vehicle-media';
 
-// Creative Builder — canvas + layer renderer (light theme, drag-to-move)
+// ─── helpers ─────────────────────────────────────────────────────────────────
 
-function CBCanvas({ width, height, layers, vars, vehicle, selectedId, onSelect, onLayerChange, onSnapshot, brand, scale = 1, interactive = true }) {
+function resolvePhotoSrc(l, vehicle) {
+  if (l.src) return l.src;
+  if (!vehicle) return null;
+  if (typeof l.index === 'number') {
+    if (Array.isArray(vehicle.images) && vehicle.images[l.index]) return vehicle.images[l.index];
+    if (Array.isArray(vehicle.photosList) && vehicle.photosList[l.index]) return vehicle.photosList[l.index];
+    if (l.index === 0 && vehicle.imageUrl) return vehicle.imageUrl;
+    return vehicle.imageUrl || null;
+  }
+  return vehicle.imageUrl || null;
+}
+
+function useKonvaImage(src) {
+  const [img, setImg] = React.useState(null);
+  React.useEffect(() => {
+    if (!src) { setImg(null); return; }
+    let cancelled = false;
+    const image = new window.Image();
+    image.crossOrigin = 'anonymous';
+    image.onload = () => { if (!cancelled) setImg(image); };
+    image.onerror = () => { if (!cancelled) setImg(null); };
+    image.src = src;
+    return () => { cancelled = true; };
+  }, [src]);
+  return img;
+}
+
+// Returns {x, y, width, height, crop?} for objectFit simulation
+function fitImage(imgW, imgH, boxW, boxH, fit) {
+  if (!imgW || !imgH) return { width: boxW, height: boxH };
+  const imgA = imgW / imgH;
+  const boxA = boxW / boxH;
+
+  if (fit === 'contain') {
+    if (imgA > boxA) {
+      const dh = boxW / imgA;
+      return { x: 0, y: (boxH - dh) / 2, width: boxW, height: dh };
+    }
+    const dw = boxH * imgA;
+    return { x: (boxW - dw) / 2, y: 0, width: dw, height: boxH };
+  }
+
+  // cover (default)
+  if (imgA > boxA) {
+    const dw = boxH * imgA;
+    const offX = (dw - boxW) / 2;
+    return {
+      crop: { x: offX / dw * imgW, y: 0, width: boxW / dw * imgW, height: imgH },
+      width: boxW, height: boxH,
+    };
+  }
+  const dh = boxW / imgA;
+  const offY = (dh - boxH) / 2;
+  return {
+    crop: { x: 0, y: offY / dh * imgH, width: imgW, height: boxH / dh * imgH },
+    width: boxW, height: boxH,
+  };
+}
+
+// ─── main canvas ─────────────────────────────────────────────────────────────
+
+function CBCanvas({ width, height, layers, vars, vehicle, selectedId, onSelect, onLayerChange, onSnapshot, brand, scale = 1, interactive = true, stageRef: externalStageRef }) {
+  const W = width;
+  const H = height;
+  const internalStageRef = React.useRef(null);
+  const stageRef = externalStageRef || internalStageRef;
+  const trRef = React.useRef(null);
+  const nodeRefs = React.useRef({});
+
+  React.useEffect(() => {
+    if (!trRef.current || !interactive) return;
+    const node = selectedId ? nodeRefs.current[selectedId] : null;
+    trRef.current.nodes(node ? [node] : []);
+    trRef.current.getLayer()?.batchDraw();
+  }, [selectedId, interactive]);
+
   return (
     <div style={{
-      width: width * scale,
-      height: height * scale,
-      position: "relative",
-      flexShrink: 0,
+      width: W * scale, height: H * scale, flexShrink: 0,
+      boxShadow: '0 1px 3px rgba(15,23,42,0.08), 0 12px 30px -10px rgba(15,23,42,0.18)',
+      border: '1px solid var(--border)',
     }}>
-      <div className="cb-artboard" style={{
-        width, height,
-        position: "absolute",
-        top: 0, left: 0,
-        transform: `scale(${scale})`,
-        transformOrigin: "top left",
-        background: "#fff",
-        overflow: "hidden",
-        boxShadow: "0 1px 3px rgba(15,23,42,0.08), 0 12px 30px -10px rgba(15,23,42,0.18)",
-        containerType: "size",
-        border: "1px solid var(--border)",
-      }}
-      onMouseDown={(e) => { if (e.target.classList.contains("cb-artboard")) onSelect && onSelect(null); }}
+      <Stage
+        ref={stageRef}
+        width={W * scale}
+        height={H * scale}
+        scaleX={scale}
+        scaleY={scale}
+        onMouseDown={(e) => { if (e.target === e.target.getStage()) onSelect?.(null); }}
       >
-        {layers.map(l => (
-          <LayerEl key={l.id} l={l} vars={vars} vehicle={vehicle} brand={brand}
-            selected={interactive && selectedId === l.id}
-            onSelect={onSelect}
-            onLayerChange={onLayerChange}
-            onSnapshot={onSnapshot}
-            interactive={interactive}/>
-        ))}
-      </div>
+        <Layer>
+          {layers.map(l => (
+            <LayerNode
+              key={l.id}
+              l={l} W={W} H={H}
+              vars={vars} vehicle={vehicle} brand={brand}
+              interactive={interactive}
+              selected={interactive && l.id === selectedId}
+              onSelect={onSelect}
+              onLayerChange={onLayerChange}
+              onSnapshot={onSnapshot}
+              setRef={(node) => {
+                if (node) nodeRefs.current[l.id] = node;
+                else delete nodeRefs.current[l.id];
+              }}
+            />
+          ))}
+          {interactive && (
+            <Transformer
+              ref={trRef}
+              rotateEnabled={false}
+              keepRatio={false}
+              anchorSize={8}
+              anchorCornerRadius={2}
+              anchorFill="#ffffff"
+              anchorStroke="#2563EB"
+              anchorStrokeWidth={1.5}
+              borderStroke="#2563EB"
+              borderStrokeWidth={1.5}
+              padding={1}
+            />
+          )}
+        </Layer>
+      </Stage>
     </div>
   );
 }
 
-function LayerEl({ l, vars, vehicle, brand, selected, onSelect, onLayerChange, onSnapshot, interactive }) {
-  const { vehicleSvg } = GGG;
+// ─── layer router ─────────────────────────────────────────────────────────────
+
+function LayerNode({ l, W, H, vars, vehicle, brand, interactive, selected, onSelect, onLayerChange, onSnapshot, setRef }) {
   const { substitute } = CreativeBuilderData;
-  const [dragging, setDragging] = React.useState(false);
+  const canInteract = interactive && !l.locked && l.type !== 'bg';
 
-  const isBg = l.type === "bg";
-  const isLocked = !!l.locked;
+  const px = l.x / 100 * W;
+  const py = l.y / 100 * H;
+  const pw = l.w / 100 * W;
+  const ph = l.h / 100 * H;
+  const fs = (l.size || 4) / 100 * W;
 
-  // --- pointer interaction (drag-to-move, click-to-select) ---
-  const handlePointerDown = (e) => {
-    if (!interactive || isBg || isLocked) return;
-    if (e.button !== 0) return;
-    e.stopPropagation();
-    onSelect && onSelect(l.id);
-
-    const artboard = e.currentTarget.closest(".cb-artboard");
-    if (!artboard) return;
-    const rect = artboard.getBoundingClientRect();   // screen px of the (scaled) artboard
-    const startX = e.clientX, startY = e.clientY;
-    const startLX = l.x, startLY = l.y;
-    let moved = false;
-    let didSnapshot = false;
-
-    const move = (ev) => {
-      const dxPct = ((ev.clientX - startX) / rect.width) * 100;
-      const dyPct = ((ev.clientY - startY) / rect.height) * 100;
-      if (!moved && Math.abs(dxPct) + Math.abs(dyPct) < 0.3) return;
-      if (!moved) { moved = true; setDragging(true); }
-      if (!didSnapshot) { onSnapshot && onSnapshot(); didSnapshot = true; }
-      const maxX = Math.max(0, 100 - (l.w || 0));
-      const maxY = Math.max(0, 100 - (l.h || 0));
-      onLayerChange(l.id, {
-        x: Math.max(-5, Math.min(maxX + 5, startLX + dxPct)),
-        y: Math.max(-5, Math.min(maxY + 5, startLY + dyPct)),
+  const interact = canInteract ? {
+    draggable: true,
+    onDragStart: () => onSnapshot?.(),
+    onDragMove: (e) => onLayerChange?.(l.id, {
+      x: Math.max(-5, Math.min(105, e.target.x() / W * 100)),
+      y: Math.max(-5, Math.min(105, e.target.y() / H * 100)),
+    }),
+    onDragEnd: (e) => onLayerChange?.(l.id, {
+      x: Math.max(-5, Math.min(105, e.target.x() / W * 100)),
+      y: Math.max(-5, Math.min(105, e.target.y() / H * 100)),
+    }),
+    onTransformStart: () => onSnapshot?.(),
+    onTransformEnd: (e) => {
+      const node = e.target;
+      const sx = node.scaleX();
+      const sy = node.scaleY();
+      node.scaleX(1);
+      node.scaleY(1);
+      onLayerChange?.(l.id, {
+        x: node.x() / W * 100,
+        y: node.y() / H * 100,
+        w: Math.max(2, l.w * sx),
+        h: Math.max(2, l.h * sy),
       });
-    };
-    const up = () => {
-      setDragging(false);
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
+    },
+    onClick: () => onSelect?.(l.id),
+    ref: setRef,
+  } : {
+    onClick: interactive && l.type !== 'bg' ? () => onSelect?.(l.id) : undefined,
+    ref: interactive && l.type !== 'bg' ? setRef : undefined,
   };
 
-  // --- resize handle drag ---
-  const handleResize = (corner) => (e) => {
-    if (!interactive || isBg || isLocked) return;
-    e.stopPropagation();
-    e.preventDefault();
-    const artboard = e.currentTarget.closest(".cb-artboard");
-    if (!artboard) return;
-    const rect = artboard.getBoundingClientRect();
-    const startX = e.clientX, startY = e.clientY;
-    const { x, y, w, h } = l;
-    let didSnapshot = false;
-
-    const move = (ev) => {
-      if (!didSnapshot) { onSnapshot && onSnapshot(); didSnapshot = true; }
-      const dxPct = ((ev.clientX - startX) / rect.width) * 100;
-      const dyPct = ((ev.clientY - startY) / rect.height) * 100;
-      let nx = x, ny = y, nw = w, nh = h;
-      if (corner.includes("r")) nw = Math.max(2, w + dxPct);
-      if (corner.includes("l")) { nx = x + dxPct; nw = Math.max(2, w - dxPct); }
-      if (corner.includes("b")) nh = Math.max(2, h + dyPct);
-      if (corner.includes("t")) { ny = y + dyPct; nh = Math.max(2, h - dyPct); }
-      onLayerChange(l.id, { x: nx, y: ny, w: nw, h: nh });
-    };
-    const up = () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-  };
-
-  // Geometry
-  const baseBox = isBg ? { position: "absolute", inset: 0 } : {
-    position: "absolute",
-    left: `${l.x}%`, top: `${l.y}%`,
-    width: `${l.w}%`, height: `${l.h}%`,
-    boxSizing: "border-box",
-  };
-  const interactProps = interactive && !isBg ? {
-    className: `cb-layer ${selected ? "selected" : ""} ${dragging ? "dragging" : ""} ${isLocked ? "locked" : ""}`,
-    onPointerDown: handlePointerDown,
-  } : {};
-
-  // Resize handles when selected
-  const handles = (interactive && selected && !isBg && !isLocked) ? (
-    <>
-      <div className="cb-handle tl" onPointerDown={handleResize("tl")}/>
-      <div className="cb-handle tr" onPointerDown={handleResize("tr")}/>
-      <div className="cb-handle bl" onPointerDown={handleResize("bl")}/>
-      <div className="cb-handle br" onPointerDown={handleResize("br")}/>
-    </>
-  ) : null;
+  const base = { x: px, y: py, ...interact };
 
   switch (l.type) {
-    case "bg":
-      return <div style={{ ...baseBox, background: l.color }}/>;
+    case 'bg':
+      return <Rect x={0} y={0} width={W} height={H} fill={l.color || '#fff'} listening={false}/>;
 
-    case "shape":
+    case 'shape':
       return (
-        <div {...interactProps} style={{
-          ...baseBox,
-          background: l.color,
-          opacity: l.opacity ?? 1,
-          border: l.border ? "1px solid rgba(0,0,0,0.1)" : "none",
-        }}>{handles}</div>
+        <Rect
+          {...base}
+          width={pw} height={ph}
+          fill={l.color || '#000'}
+          opacity={l.opacity ?? 1}
+          stroke={l.border ? 'rgba(0,0,0,0.1)' : undefined}
+          strokeWidth={l.border ? 1 : 0}
+        />
       );
 
-    case "photo": {
+    case 'photo':
+      return <PhotoLayer l={l} vehicle={vehicle} x={px} y={py} w={pw} h={ph} interact={interact}/>;
+
+    case 'text': {
+      const text = substitute(l.text || '', vars);
+      if (l.pad) {
+        return (
+          <Group {...base} width={pw} height={ph}>
+            <Rect width={pw} height={ph} fill={l.bg || '#DC2626'} cornerRadius={W * 0.003}/>
+            <Text
+              x={pw * 0.04} y={0}
+              width={pw * 0.92} height={ph}
+              text={text}
+              fontSize={fs}
+              fontFamily="Inter, -apple-system, sans-serif"
+              fontStyle={String(l.weight || 600)}
+              fill={l.color || '#fff'}
+              align={l.align || 'left'}
+              verticalAlign="middle"
+              wrap="word"
+              letterSpacing={l.letterSpacing ? l.letterSpacing * fs : 0}
+              textDecoration={l.strike ? 'line-through' : ''}
+              listening={false}
+            />
+          </Group>
+        );
+      }
       return (
-        <div {...interactProps} style={{ ...baseBox, overflow: "hidden", background: "#cbd5e1" }}>
-          <div style={{ width: "100%", height: "100%", pointerEvents: "none" }}>
-            <VehicleMedia v={vehicle} index={l.index} src={l.src}/>
-          </div>
-          {l.mask === "darken" && <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.6) 100%)", pointerEvents: "none" }}/>}
-          {l.mask === "fade-left" && <div style={{ position: "absolute", inset: 0, background: "linear-gradient(90deg, rgba(127,29,29,0.85) 0%, transparent 35%)", pointerEvents: "none" }}/>}
-          {handles}
-        </div>
+        <Text
+          {...base}
+          width={pw} height={ph}
+          text={text}
+          fontSize={fs}
+          fontFamily="Inter, -apple-system, sans-serif"
+          fontStyle={String(l.weight || 600)}
+          fill={l.color || '#0F172A'}
+          align={l.align || 'left'}
+          verticalAlign="middle"
+          wrap="word"
+          letterSpacing={l.letterSpacing ? l.letterSpacing * fs : 0}
+          textDecoration={l.strike ? 'line-through' : ''}
+        />
       );
     }
 
-    case "text": {
-      const text = substitute(l.text, vars);
-      const align = l.align || "left";
-      const just = align === "center" ? "center" : align === "right" ? "flex-end" : "flex-start";
-      const inner = (
-        <span style={{
-          textDecoration: l.strike ? "line-through" : "none",
-          letterSpacing: l.letterSpacing ? `${l.letterSpacing}em` : 0,
-          lineHeight: 1.04,
-          pointerEvents: "none",
-        }}>{text}</span>
-      );
+    case 'ribbon':
       return (
-        <div {...interactProps} style={{
-          ...baseBox,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: just,
-          fontSize: `${l.size}cqw`,
-          fontWeight: l.weight || 600,
-          color: l.color || "#0F172A",
-          textAlign: align,
-        }}>
-          {l.pad ? (
-            <span style={{
-              background: l.bg, color: l.color,
-              padding: "0.25em 0.55em",
-              borderRadius: "0.3cqw",
-              letterSpacing: l.letterSpacing ? `${l.letterSpacing}em` : 0,
-              textDecoration: l.strike ? "line-through" : "none",
-              pointerEvents: "none",
-            }}>{text}</span>
-          ) : inner}
-          {handles}
-        </div>
+        <Group {...base} width={pw} height={ph}>
+          <Shape
+            sceneFunc={(ctx, shape) => {
+              ctx.beginPath();
+              ctx.moveTo(0, 0);
+              ctx.lineTo(pw, 0);
+              ctx.lineTo(pw * 0.95, ph / 2);
+              ctx.lineTo(pw, ph);
+              ctx.lineTo(0, ph);
+              ctx.closePath();
+              ctx.fillStrokeShape(shape);
+            }}
+            fill={l.color || '#DC2626'}
+            width={pw} height={ph}
+            listening={false}
+          />
+          <Text
+            x={pw * 0.04} y={0}
+            width={pw * 0.88} height={ph}
+            text={l.text || ''}
+            fontSize={Math.max(ph * 0.4, 8)}
+            fontFamily="Inter, -apple-system, sans-serif"
+            fontStyle="800"
+            fill={l.textColor || '#fff'}
+            align="left"
+            verticalAlign="middle"
+            letterSpacing={Math.max(ph * 0.4, 8) * 0.1}
+            listening={false}
+          />
+        </Group>
+      );
+
+    case 'stat-row':
+      return <StatRowLayer l={l} vars={vars} x={px} y={py} w={pw} h={ph} W={W} interact={interact}/>;
+
+    case 'cta': {
+      const text = substitute(l.text || '', vars);
+      return (
+        <Group {...base} width={pw} height={ph}>
+          <Rect width={pw} height={ph} fill={l.bg || '#2563EB'} cornerRadius={W * 0.004}/>
+          <Text
+            width={pw} height={ph}
+            text={text}
+            fontSize={Math.max(ph * 0.38, W * 0.024)}
+            fontFamily="Inter, -apple-system, sans-serif"
+            fontStyle="700"
+            fill={l.color || '#fff'}
+            align="center"
+            verticalAlign="middle"
+            listening={false}
+          />
+        </Group>
       );
     }
 
-    case "ribbon":
-      return (
-        <div {...interactProps} style={{
-          ...baseBox,
-          background: l.color,
-          color: l.textColor || "#fff",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontWeight: 800,
-          fontSize: `${(l.h || 5) * 0.45}cqw`,
-          letterSpacing: "0.1em",
-          textTransform: "uppercase",
-          clipPath: "polygon(0 0, 100% 0, 95% 50%, 100% 100%, 0 100%)",
-          paddingRight: "1%",
-        }}>
-          <span style={{ pointerEvents: "none" }}>{l.text}</span>
-          {handles}
-        </div>
-      );
+    case 'logo':
+      return <LogoLayer l={l} x={px} y={py} w={pw} h={ph} W={W} interact={interact}/>;
 
-    case "stat-row": {
-      const cols = l.items.length;
-      return (
-        <div {...interactProps} style={{
-          ...baseBox,
-          display: "grid",
-          gridTemplateColumns: `repeat(${cols}, 1fr)`,
-          gap: "0.6cqw",
-        }}>
-          {l.items.map((it, i) => {
-            const value = substitute(it.value, vars);
-            const hi = it.highlight;
-            return (
-              <div key={i} style={{
-                background: hi ? "#DC2626" : (l.bg || "#1E293B"),
-                color: hi ? "#fff" : (l.color || "#fff"),
-                padding: "4% 5%",
-                borderRadius: "0.5cqw",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "center",
-                border: l.border && !hi ? "1px solid #E2E8F0" : "none",
-                pointerEvents: "none",
-              }}>
-                <div style={{ fontSize: "1.6cqw", fontWeight: 700, opacity: hi ? 0.95 : 0.6, letterSpacing: "0.1em" }}>{it.label}</div>
-                <div style={{ fontSize: "3.6cqw", fontWeight: 800, letterSpacing: "-0.02em", marginTop: "0.15em" }}>{value}</div>
-              </div>
-            );
-          })}
-          {handles}
-        </div>
-      );
-    }
+    case 'qr':
+      return <QRLayer l={l} x={px} y={py} w={pw} h={ph} W={W} interact={interact}/>;
 
-    case "cta": {
-      const text = substitute(l.text, vars);
-      return (
-        <div {...interactProps} style={{
-          ...baseBox,
-          background: l.bg || "#2563EB",
-          color: l.color || "#fff",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontWeight: 700,
-          fontSize: `${Math.max((l.h || 5) * 0.38, 2.4)}cqw`,
-          borderRadius: "0.4cqw",
-          letterSpacing: "0.005em",
-        }}>
-          <span style={{ pointerEvents: "none" }}>{text}</span>
-          {handles}
-        </div>
-      );
-    }
-
-    case "logo":
-      return (
-        <div {...interactProps} style={{
-          ...baseBox,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}>
-          <div style={{
-            background: l.color === "light" ? "#fff" : "#111",
-            color: l.color === "light" ? "#111" : "#fff",
-            padding: "0.4em 0.6em",
-            fontWeight: 800,
-            fontSize: `${(l.h || 5) * 0.55}cqw`,
-            borderRadius: "0.4cqw",
-            letterSpacing: "-0.01em",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "0.15em",
-            pointerEvents: "none",
-          }}>
-            G<span style={{ width: "0.25em", height: "0.25em", background: "#F59E0B", borderRadius: "50%" }}/>G
-          </div>
-          {handles}
-        </div>
-      );
-
-    case "qr": {
-      return (
-        <div {...interactProps} style={{
-          ...baseBox,
-          background: "#fff",
-          border: "2px solid #000",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "5%",
-          boxSizing: "border-box"
-        }}>
-          <div style={{
-            width: "80%",
-            height: "80%",
-            background: "radial-gradient(circle, #000 32%, transparent 32%), radial-gradient(circle, #000 32%, transparent 32%)",
-            backgroundSize: "6px 6px",
-            backgroundPosition: "0 0, 3px 3px",
-            position: "relative",
-            border: "1px solid #000",
-            pointerEvents: "none",
-            flex: 1
-          }}>
-            <div style={{ position: "absolute", top: 0, left: 0, width: 8, height: 8, border: "2px solid #000", background: "#fff" }}/>
-            <div style={{ position: "absolute", top: 0, right: 0, width: 8, height: 8, border: "2px solid #000", background: "#fff" }}/>
-            <div style={{ position: "absolute", bottom: 0, left: 0, width: 8, height: 8, border: "2px solid #000", background: "#fff" }}/>
-          </div>
-          <div style={{ fontSize: "1.4cqw", fontWeight: 900, color: "#000", marginTop: "4%", textTransform: "uppercase", pointerEvents: "none" }}>
-            SCAN FOR REPORT
-          </div>
-          {handles}
-        </div>
-      );
-    }
+    case 'image-gen':
+      return <ImageGenLayer l={l} x={px} y={py} w={pw} h={ph} interact={interact}/>;
 
     default:
       return null;
   }
 }
 
+// ─── photo layer ─────────────────────────────────────────────────────────────
+
+function PhotoLayer({ l, vehicle, x, y, w, h, interact }) {
+  const src = resolvePhotoSrc(l, vehicle);
+  const img = useKonvaImage(src);
+  const fitProps = img
+    ? fitImage(img.naturalWidth || img.width, img.naturalHeight || img.height, w, h, l.fit || 'cover')
+    : { width: w, height: h };
+
+  return (
+    <Group x={x} y={y} width={w} height={h} clipFunc={(ctx) => ctx.rect(0, 0, w, h)} {...interact}>
+      <Rect width={w} height={h} fill="#CBD5E1" listening={false}/>
+      {img && (
+        <KImage
+          image={img}
+          x={fitProps.x || 0}
+          y={fitProps.y || 0}
+          width={fitProps.width || w}
+          height={fitProps.height || h}
+          crop={fitProps.crop}
+          listening={false}
+        />
+      )}
+      {l.mask === 'darken' && (
+        <Rect
+          width={w} height={h}
+          fillLinearGradientStartPoint={{ x: 0, y: 0 }}
+          fillLinearGradientEndPoint={{ x: 0, y: h }}
+          fillLinearGradientColorStops={[0, 'rgba(0,0,0,0.2)', 1, 'rgba(0,0,0,0.6)']}
+          listening={false}
+        />
+      )}
+      {l.mask === 'fade-left' && (
+        <Rect
+          width={w} height={h}
+          fillLinearGradientStartPoint={{ x: 0, y: 0 }}
+          fillLinearGradientEndPoint={{ x: w * 0.35, y: 0 }}
+          fillLinearGradientColorStops={[0, 'rgba(127,29,29,0.85)', 1, 'rgba(0,0,0,0)']}
+          listening={false}
+        />
+      )}
+    </Group>
+  );
+}
+
+// ─── stat-row layer ───────────────────────────────────────────────────────────
+
+function StatRowLayer({ l, vars, x, y, w, h, W, interact }) {
+  const { substitute } = CreativeBuilderData;
+  const items = l.items || [];
+  const cols = items.length;
+  const gap = W * 0.005;
+  const colW = (w - gap * (cols - 1)) / cols;
+  const labelFs = Math.max(1.6 / 100 * W, 9);
+  const valueFs = Math.max(3.2 / 100 * W, 13);
+  const cornerR = W * 0.004;
+
+  return (
+    <Group x={x} y={y} width={w} height={h} {...interact}>
+      {items.map((item, i) => {
+        const hi = !!item.highlight;
+        const bg = hi ? '#DC2626' : (l.bg || '#1E293B');
+        const fg = hi ? '#fff' : (l.color || '#fff');
+        const value = substitute(item.value || '', vars);
+        const cx = i * (colW + gap);
+
+        return (
+          <Group key={i} x={cx} listening={false}>
+            <Rect
+              width={colW} height={h}
+              fill={bg}
+              cornerRadius={cornerR}
+              stroke={l.border && !hi ? '#E2E8F0' : undefined}
+              strokeWidth={l.border && !hi ? 1 : 0}
+            />
+            <Text
+              x={colW * 0.06} y={h * 0.1}
+              width={colW * 0.88} height={h * 0.38}
+              text={item.label || ''}
+              fontSize={labelFs}
+              fontFamily="Inter, -apple-system, sans-serif"
+              fontStyle="700"
+              fill={fg}
+              opacity={0.65}
+              letterSpacing={labelFs * 0.1}
+              align="left"
+              verticalAlign="middle"
+            />
+            <Text
+              x={colW * 0.06} y={h * 0.48}
+              width={colW * 0.88} height={h * 0.5}
+              text={value}
+              fontSize={valueFs}
+              fontFamily="Inter, -apple-system, sans-serif"
+              fontStyle="800"
+              fill={fg}
+              align="left"
+              verticalAlign="middle"
+            />
+          </Group>
+        );
+      })}
+    </Group>
+  );
+}
+
+// ─── logo layer ───────────────────────────────────────────────────────────────
+
+function LogoLayer({ l, x, y, w, h, W, interact }) {
+  const light = l.color === 'light';
+  const bg = light ? '#fff' : '#111827';
+  const fg = light ? '#111' : '#fff';
+  const logoFs = h * 0.52;
+  const dotR = h * 0.09;
+  const halfW = w / 2;
+
+  return (
+    <Group x={x} y={y} width={w} height={h} {...interact}>
+      <Rect width={w} height={h} fill={bg} cornerRadius={W * 0.004}/>
+      <Text
+        x={0} y={0}
+        width={halfW - dotR - w * 0.04}
+        height={h}
+        text="G"
+        fontSize={logoFs}
+        fontFamily="Inter, -apple-system, sans-serif"
+        fontStyle="800"
+        fill={fg}
+        align="right"
+        verticalAlign="middle"
+        listening={false}
+      />
+      <Circle x={halfW} y={h / 2} radius={dotR} fill="#F59E0B" listening={false}/>
+      <Text
+        x={halfW + dotR + w * 0.02}
+        y={0}
+        width={halfW - dotR - w * 0.04}
+        height={h}
+        text="G"
+        fontSize={logoFs}
+        fontFamily="Inter, -apple-system, sans-serif"
+        fontStyle="800"
+        fill={fg}
+        align="left"
+        verticalAlign="middle"
+        listening={false}
+      />
+    </Group>
+  );
+}
+
+// ─── qr layer ─────────────────────────────────────────────────────────────────
+
+function QRLayer({ l, x, y, w, h, W, interact }) {
+  const labelFs = Math.max(1.4 / 100 * W, 8);
+  const qrS = h * 0.62;
+  const qrX = (w - qrS) / 2;
+  const qrY = h * 0.08;
+  const sq = qrS * 0.22;
+
+  return (
+    <Group x={x} y={y} width={w} height={h} {...interact}>
+      <Rect width={w} height={h} fill="#fff" stroke="#000" strokeWidth={2}/>
+      <Rect x={qrX} y={qrY} width={qrS} height={qrS} fill="#000" listening={false}/>
+      <Rect x={qrX + qrS * 0.06} y={qrY + qrS * 0.06} width={qrS * 0.88} height={qrS * 0.88} fill="#fff" listening={false}/>
+      {/* corner finder squares */}
+      <Rect x={qrX + qrS * 0.08} y={qrY + qrS * 0.08} width={sq} height={sq} fill="#000" listening={false}/>
+      <Rect x={qrX + qrS * 0.7} y={qrY + qrS * 0.08} width={sq} height={sq} fill="#000" listening={false}/>
+      <Rect x={qrX + qrS * 0.08} y={qrY + qrS * 0.7} width={sq} height={sq} fill="#000" listening={false}/>
+      {/* center data dots */}
+      {[[0.4, 0.4],[0.52, 0.32],[0.62, 0.48],[0.44, 0.58],[0.56, 0.62]].map(([cx, cy], i) => (
+        <Rect key={i} x={qrX + qrS * cx} y={qrY + qrS * cy} width={qrS * 0.06} height={qrS * 0.06} fill="#000" listening={false}/>
+      ))}
+      <Text
+        x={0} y={qrY + qrS + h * 0.04}
+        width={w} height={h * 0.18}
+        text="SCAN FOR REPORT"
+        fontSize={labelFs}
+        fontFamily="Inter, -apple-system, sans-serif"
+        fontStyle="900"
+        fill="#000"
+        align="center"
+        verticalAlign="middle"
+        letterSpacing={labelFs * 0.1}
+        listening={false}
+      />
+    </Group>
+  );
+}
+
+// ─── image-gen layer (ComfyUI generated) ─────────────────────────────────────
+
+function ImageGenLayer({ l, x, y, w, h, interact }) {
+  const img = useKonvaImage(l.src || null);
+
+  return (
+    <Group x={x} y={y} width={w} height={h} clipFunc={(ctx) => ctx.rect(0, 0, w, h)} {...interact}>
+      {img ? (
+        <KImage image={img} width={w} height={h} listening={false}/>
+      ) : (
+        <>
+          <Rect
+            width={w} height={h}
+            fill="rgba(37,99,235,0.06)"
+            stroke="#2563EB"
+            strokeWidth={1.5}
+            dash={[6, 3]}
+          />
+          <Text
+            width={w} height={h}
+            text={l.status === 'pending' ? 'Generating image…' : 'AI Image'}
+            fontSize={Math.min(w, h) * 0.07}
+            fontFamily="Inter, -apple-system, sans-serif"
+            fontStyle="600"
+            fill="#2563EB"
+            align="center"
+            verticalAlign="middle"
+            listening={false}
+          />
+        </>
+      )}
+    </Group>
+  );
+}
 
 export { CBCanvas };

@@ -1,19 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { resolveDealershipId } from "@/lib/dealerships";
 import { runImportPipeline } from "@/features/inventory/intake/pipeline";
 import type { VehicleImportRecord } from "@/features/inventory/intake/types";
-
-async function getFirstDealershipId(supabase: any): Promise<string | null> {
-  const { data, error } = await supabase
-    .from("dealerships")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) return null;
-  return data?.id || null;
-}
 
 export async function POST(request: Request) {
   const supabase = getSupabaseAdmin();
@@ -35,7 +24,7 @@ export async function POST(request: Request) {
   let dealershipId = body.dealershipId;
 
   if (!dealershipId) {
-    dealershipId = await getFirstDealershipId(supabase);
+    dealershipId = await resolveDealershipId(supabase);
     if (!dealershipId) {
       return NextResponse.json(
         { error: "No dealership found. Ingestion cannot proceed." },
@@ -44,23 +33,14 @@ export async function POST(request: Request) {
     }
   }
 
-  // High-fidelity mock vehicle data for CarsForSale webhook simulator in testing environments
-  const defaultMockVehicle = {
-    vin: "1C4HJXEG8KW182918",
-    stockNumber: "CFS-9811",
-    year: 2019,
-    make: "Jeep",
-    model: "Wrangler",
-    trim: "Unlimited Rubicon",
-    bodyStyle: "SUV",
-    mileage: 42100,
-    price: 36995,
-    downPayment: 3500,
-    sourceUrl: "https://www.carfax.com/VehicleHistory/report?vin=1C4HJXEG8KW182918",
-    description: "Stunning Jeep Wrangler Rubicon 4x4. Clean history report. Upgraded wheel package. Trail rated ready!",
-  };
+  if (!vehicleData || typeof vehicleData !== "object") {
+    return NextResponse.json(
+      { error: "vehicleData is required. The webhook does not generate sample data." },
+      { status: 400 }
+    );
+  }
 
-  const incomingVehicle = vehicleData || defaultMockVehicle;
+  const incomingVehicle = vehicleData;
 
   try {
     console.log("[Webhook Ingestion] Normalizing incoming stock record...");

@@ -1,16 +1,10 @@
 import { NextResponse } from "next/server";
 
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { resolveDealershipId } from "@/lib/dealerships";
 
 const DECIDED_STATUSES = new Set(["approved", "rejected"]);
 const ALLOWED_STATUSES = new Set(["pending", "approved", "rejected", "snoozed", "archived"]);
-
-async function resolveDealershipId(supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>, clientId?: string | null) {
-  if (clientId && clientId !== "agency_overview") return clientId;
-  const { data, error } = await supabase.from("dealerships").select("id").order("created_at", { ascending: true }).limit(1).maybeSingle();
-  if (error) throw error;
-  return data?.id || null;
-}
 
 function defaultSnoozeUntil() {
   const next = new Date();

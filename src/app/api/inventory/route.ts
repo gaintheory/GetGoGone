@@ -1,100 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { mapSourceVehicleToPrototypeVehicle } from "@/features/inventory/prototype-adapter";
-import { getLocalVehicleImageMap } from "@/features/inventory/local-images";
-import type { Tables } from "@/lib/database.types";
+import {
+  fromInspectionSource,
+  fromVehiclesTable,
+  type VehicleRowWithPhotos,
+} from "@/features/inventory/prototype-adapter";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-
-type VehicleRow = Tables<"vehicles">;
-
-const palettes: Record<string, string[]> = {
-  sedan: ["#64748b", "#334155", "#cbd5e1"],
-  truck: ["#1e293b", "#0f172a", "#cbd5e1"],
-  suv: ["#0f766e", "#0f172a", "#cbd5e1"],
-  van: ["#475569", "#1e293b", "#cbd5e1"],
-};
-
-function normalizeBody(body?: string | null): string {
-  const value = (body || "").toLowerCase();
-  if (value.includes("truck") || value.includes("pickup")) return "truck";
-  if (value.includes("suv") || value.includes("utility")) return "suv";
-  if (value.includes("van")) return "van";
-  return "sedan";
-}
-
-type VehicleRowWithPhotos = VehicleRow & {
-  vehicle_photos?: {
-    storage_path: string;
-    is_primary: boolean;
-    position: number;
-  }[];
-};
-
-function mapVehicleRowToPrototypeVehicle(row: VehicleRowWithPhotos) {
-  const body = normalizeBody(row.body_style);
-  
-  // Find primary photo or lowest sequence photo from imported photos
-  let imageUrl = null;
-  const photosCount = row.vehicle_photos?.length || 0;
-  let photosList: string[] = [];
-  if (row.vehicle_photos && photosCount > 0) {
-    const sorted = [...row.vehicle_photos].sort((a, b) => a.position - b.position);
-    const primary = row.vehicle_photos.find(p => p.is_primary) || sorted[0];
-    imageUrl = primary?.storage_path || null;
-    photosList = sorted.map(p => p.storage_path);
-  }
-  
-  if (!imageUrl) {
-    imageUrl = getLocalVehicleImageMap().get(row.vin.toUpperCase()) || null;
-  }
-
-  if (imageUrl && photosList.length === 0) {
-    photosList = [imageUrl];
-  }
-
-  return {
-    id: row.id,
-    stock: row.stock_number || row.source_record_id || "INV",
-    year: row.year || "",
-    make: row.make || "Unknown",
-    model: row.model || "Vehicle",
-    trim: row.trim || "",
-    body,
-    color: row.exterior_color || "",
-    palette: palettes[body],
-    price: row.price || 0,
-    down: row.down_payment || 0,
-    weekly: 0,
-    monthly: 0,
-    mileage: row.mileage || 0,
-    vin: row.vin,
-    imageUrl,
-    images: photosList,
-    photosList,
-    sourceUrl: row.source_url,
-    status: row.status === "active" ? "Active" : row.status,
-    campaign: "Draft",
-    daysIn: 0,
-    leads: 0,
-    photos: photosCount || (imageUrl ? 1 : 0),
-    features: [],
-    notes: row.notes || row.description || "",
-    sourceSystem: row.source_system || "getgogone_vehicles",
-    sourceRecordId: row.source_record_id,
-  };
-}
-
-async function firstDealershipId(supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>) {
-  const { data, error } = await supabase
-    .from("dealerships")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) throw error;
-  return data?.id || null;
-}
+import { resolveDealershipId } from "@/lib/dealerships";
 
 async function sourceInventory(supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>) {
   const { data, error } = await supabase
@@ -103,7 +15,7 @@ async function sourceInventory(supabase: NonNullable<ReturnType<typeof getSupaba
     .order("source_updated_at", { ascending: false, nullsFirst: false });
 
   if (error) throw error;
-  return (data || []).map(mapSourceVehicleToPrototypeVehicle);
+  return (data || []).map(fromInspectionSource);
 }
 
 export async function GET(request: Request) {
@@ -147,12 +59,12 @@ export async function GET(request: Request) {
         return NextResponse.json({
           configured: true,
           source: "GetGoGone vehicles",
-          vehicles: (clientVehicles as any[]).map(mapVehicleRowToPrototypeVehicle),
+          vehicles: (clientVehicles as VehicleRowWithPhotos[]).map(fromVehiclesTable),
         });
       }
 
       // 3. Fallback to demo seeds only if table is completely empty and it is the default dealership
-      const defaultClientId = await firstDealershipId(supabase);
+      const defaultClientId = await resolveDealershipId(supabase, null);
       if (defaultClientId && clientId === defaultClientId) {
         return NextResponse.json({
           configured: true,

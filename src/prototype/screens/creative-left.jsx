@@ -7,22 +7,23 @@ import { VehicleMedia } from '../vehicle-media';
 
 // Creative Builder — Left sidebar (light theme)
 
-function CBLeftSidebar({ tab, onTab, templateId, onTemplate, vehicle, onVehicle, vehicles: providedVehicles, layers, onAddLayer, onAddLayers, brand, onBrand, versions, savedTemplates, onSavedTemplate, onLoadVersion, toast, clientId }) {
+function CBLeftSidebar({ tab, onTab, templateId, onTemplate, vehicle, onVehicle, vehicles: providedVehicles, layers, onAddLayer, onAddLayers, brand, onBrand, versions, savedTemplates, onSavedTemplate, onLoadVersion, toast, clientId, collapsed, onToggleCollapse, canvasSize }) {
   const { adTemplates } = CreativeBuilderData;
   const { VEHICLES, vehicleSvg } = GGG;
-  const vehicles = providedVehicles && providedVehicles.length ? providedVehicles : VEHICLES;
+  const vehicles = providedVehicles || [];
 
   const tabs = [
     { id: "vehicle", label: "Vehicle", icon: Icon.Car },
+    { id: "generate", label: "Generate", icon: Icon.Sparkles },
     { id: "templates", label: "Templates", icon: Icon.Layers },
     { id: "import", label: "Import", icon: Icon.Upload },
     { id: "photos", label: "Photos", icon: Icon.Image },
     { id: "text", label: "Text", icon: Icon.FileText },
-    { id: "aiOverlays", label: "AI Overlays", icon: Icon.Sparkles },
+    { id: "aiOverlays", label: "AI Layers", icon: Icon.Star },
     { id: "badges", label: "Badges", icon: Icon.Tag },
     { id: "shapes", label: "Shapes", icon: Icon.Layers },
     { id: "offer", label: "Offer", icon: Icon.Dollar },
-    { id: "brand", label: "Brand", icon: Icon.Star },
+    { id: "brand", label: "Brand", icon: Icon.Check },
     { id: "versions", label: "Saved", icon: Icon.Folder },
   ];
 
@@ -31,7 +32,7 @@ function CBLeftSidebar({ tab, onTab, templateId, onTemplate, vehicle, onVehicle,
       background: "var(--surface)",
       borderRight: "1px solid var(--border)",
       display: "grid",
-      gridTemplateColumns: "56px 1fr",
+      gridTemplateColumns: collapsed ? "56px" : "56px 1fr",
       overflow: "hidden",
     }}>
       {/* Rail */}
@@ -40,15 +41,16 @@ function CBLeftSidebar({ tab, onTab, templateId, onTemplate, vehicle, onVehicle,
         borderRight: "1px solid var(--border)",
         display: "flex", flexDirection: "column",
         padding: "8px 6px", gap: 4,
+        overflow: "hidden",
       }}>
         {tabs.map(t => {
           const I = t.icon;
           const sel = tab === t.id;
           return (
-            <button key={t.id} onClick={() => onTab(t.id)}
+            <button key={t.id} onClick={() => { onTab(t.id); if (collapsed) onToggleCollapse?.(); }}
               style={{
-                background: sel ? "#111827" : "transparent",
-                color: sel ? "#fff" : "var(--text-2)",
+                background: sel && !collapsed ? "#111827" : sel ? "rgba(17,24,39,0.12)" : "transparent",
+                color: sel ? (collapsed ? "#111827" : "#fff") : "var(--text-2)",
                 border: "none",
                 borderRadius: "var(--radius)",
                 padding: "8px 4px",
@@ -56,28 +58,41 @@ function CBLeftSidebar({ tab, onTab, templateId, onTemplate, vehicle, onVehicle,
                 fontFamily: "inherit",
                 display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
                 fontSize: 9.5, fontWeight: 500,
+                flexShrink: 0,
               }}>
               <I size={16}/>
               {t.label}
             </button>
           );
         })}
+        {/* Collapse toggle at bottom */}
+        <div style={{ flex: 1 }}/>
+        <button
+          onClick={onToggleCollapse}
+          title={collapsed ? "Expand panel" : "Collapse panel"}
+          style={{ background: "transparent", border: "none", borderRadius: "var(--radius)", padding: "8px 4px", cursor: "pointer", color: "var(--text-3)", display: "flex", justifyContent: "center" }}
+        >
+          {collapsed ? <Icon.ChevronRight size={14}/> : <Icon.ChevronLeft size={14}/>}
+        </button>
       </div>
 
       {/* Panel */}
-      <div style={{ overflow: "auto", color: "var(--text)", fontSize: 12.5, padding: 12 }}>
-        {tab === "vehicle" && <VehicleTab vehicle={vehicle} onVehicle={onVehicle} vehicles={vehicles} onTemplate={onTemplate} onTab={onTab}/>}
-        {tab === "templates" && <TemplatesTab templateId={templateId} onTemplate={onTemplate} adTemplates={adTemplates} savedTemplates={savedTemplates} onSavedTemplate={onSavedTemplate} vehicle={vehicle} onVehicle={onVehicle} vehicles={vehicles}/>}
-        {tab === "import" && <ImportTemplateTab onAddLayer={onAddLayer}/>}
-        {tab === "photos" && <PhotosTab vehicle={vehicle} onAddLayer={onAddLayer} onAddLayers={onAddLayers}/>}
-        {tab === "text" && <TextTab onAddLayer={onAddLayer} onAddLayers={onAddLayers}/>}
-        {tab === "aiOverlays" && <AIOverlaysTab onAddLayer={onAddLayer} onAddLayers={onAddLayers} toast={toast} clientId={clientId}/>}
-        {tab === "badges" && <BadgesTab onAddLayer={onAddLayer}/>}
-        {tab === "shapes" && <ShapesTab onAddLayer={onAddLayer} onAddLayers={onAddLayers}/>}
-        {tab === "offer" && <OfferTab brand={brand} onBrand={onBrand}/>}
-        {tab === "brand" && <BrandTab brand={brand} onBrand={onBrand}/>}
-        {tab === "versions" && <VersionsTab versions={versions} onLoadVersion={onLoadVersion}/>}
-      </div>
+      {!collapsed && (
+        <div style={{ overflow: "auto", color: "var(--text)", fontSize: 12.5, padding: 12 }}>
+          {tab === "vehicle" && <VehicleTab vehicle={vehicle} onVehicle={onVehicle} vehicles={vehicles} onTemplate={onTemplate} onTab={onTab}/>}
+          {tab === "generate" && <GenerateTab vehicle={vehicle} canvasSize={canvasSize} onAddLayer={onAddLayer} toast={toast}/>}
+          {tab === "templates" && <TemplatesTab templateId={templateId} onTemplate={onTemplate} adTemplates={adTemplates} savedTemplates={savedTemplates} onSavedTemplate={onSavedTemplate} vehicle={vehicle} onVehicle={onVehicle} vehicles={vehicles}/>}
+          {tab === "import" && <ImportTemplateTab onAddLayer={onAddLayer}/>}
+          {tab === "photos" && <PhotosTab vehicle={vehicle} onAddLayer={onAddLayer} onAddLayers={onAddLayers}/>}
+          {tab === "text" && <TextTab onAddLayer={onAddLayer} onAddLayers={onAddLayers}/>}
+          {tab === "aiOverlays" && <AIOverlaysTab onAddLayer={onAddLayer} onAddLayers={onAddLayers} toast={toast} clientId={clientId}/>}
+          {tab === "badges" && <BadgesTab onAddLayer={onAddLayer}/>}
+          {tab === "shapes" && <ShapesTab onAddLayer={onAddLayer} onAddLayers={onAddLayers}/>}
+          {tab === "offer" && <OfferTab brand={brand} onBrand={onBrand}/>}
+          {tab === "brand" && <BrandTab brand={brand} onBrand={onBrand}/>}
+          {tab === "versions" && <VersionsTab versions={versions} onLoadVersion={onLoadVersion}/>}
+        </div>
+      )}
     </aside>
   );
 }
@@ -1019,6 +1034,164 @@ function AIOverlaysTab({ onAddLayer, onAddLayers, toast, clientId }) {
             </>
           )}
         </button>
+      </div>
+    </>
+  );
+}
+
+// ============================================================
+// GENERATE TAB — ComfyUI image generation
+// ============================================================
+function GenerateTab({ vehicle, canvasSize, onAddLayer, toast }) {
+  const [imgPrompt, setImgPrompt] = React.useState('');
+  const [generating, setGenerating] = React.useState(false);
+  const [jobId, setJobId] = React.useState(null);
+  const [jobStatus, setJobStatus] = React.useState(null); // 'pending' | 'done' | 'error'
+  const [resultUrl, setResultUrl] = React.useState(null);
+  const pollRef = React.useRef(null);
+
+  const stopPoll = () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
+
+  React.useEffect(() => () => stopPoll(), []);
+
+  const startGenerate = async () => {
+    if (!imgPrompt.trim()) { toast?.('Enter a prompt first'); return; }
+    setGenerating(true);
+    setJobStatus('pending');
+    setResultUrl(null);
+    stopPoll();
+    try {
+      const res = await fetch('/api/ai/generate-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: imgPrompt,
+          width: canvasSize?.w || 1080,
+          height: canvasSize?.h || 1080,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Generation failed');
+      setJobId(data.jobId);
+      pollRef.current = setInterval(async () => {
+        try {
+          const pr = await fetch(`/api/ai/generate-image?jobId=${encodeURIComponent(data.jobId)}`);
+          const pd = await pr.json();
+          if (pd.status === 'done' && pd.imageUrl) {
+            stopPoll();
+            setJobStatus('done');
+            setResultUrl(pd.imageUrl);
+            setGenerating(false);
+            toast?.('Image generated!');
+          } else if (pd.status === 'error') {
+            stopPoll();
+            setJobStatus('error');
+            setGenerating(false);
+            toast?.('Generation failed');
+          }
+        } catch { /* keep polling */ }
+      }, 2000);
+    } catch (err) {
+      setJobStatus('error');
+      setGenerating(false);
+      toast?.(err.message || 'ComfyUI not reachable — is it running?');
+    }
+  };
+
+  const addToCanvas = () => {
+    if (!resultUrl) return;
+    onAddLayer({
+      id: 'imggen-' + Date.now(),
+      type: 'image-gen',
+      x: 5, y: 5, w: 90, h: 60,
+      src: resultUrl,
+      prompt: imgPrompt,
+      status: 'done',
+    });
+    toast?.('Image added to canvas');
+  };
+
+  const presets = [
+    { label: 'Cinematic lot photo', prompt: 'A shiny sedan parked on a car dealership lot at golden hour, dramatic lighting, professional automotive photography, 8k' },
+    { label: 'Sleek studio background', prompt: 'Clean white studio background with subtle gradient, automotive photography backdrop, professional lighting' },
+    { label: 'Night city street', prompt: 'A pickup truck on a wet city street at night, neon reflections, cinematic, dramatic, high contrast' },
+    { label: 'Open highway', prompt: 'Open desert highway at sunset, wide angle, freedom, adventure vibes, cinematic sky' },
+  ];
+
+  return (
+    <>
+      <CBPanelTitle>COMFYUI IMAGE GENERATION</CBPanelTitle>
+      <div style={{ background: "var(--gray-50)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 10, marginBottom: 12, fontSize: 11.5, lineHeight: 1.45 }}>
+        <div style={{ fontWeight: 700, marginBottom: 3, display: "flex", alignItems: "center", gap: 4 }}>
+          <Icon.Sparkles size={11}/> Requires ComfyUI running locally
+        </div>
+        <div className="muted">Start ComfyUI at <span className="mono">localhost:8188</span> with FLUX.1-schnell loaded. Generated images appear as canvas layers.</div>
+      </div>
+
+      <CBPanelTitle>IMAGE PROMPT</CBPanelTitle>
+      <div className="col" style={{ gap: 8 }}>
+        <textarea
+          className="cb-input"
+          value={imgPrompt}
+          onChange={e => setImgPrompt(e.target.value)}
+          placeholder="Describe the image to generate…"
+          rows={3}
+          disabled={generating}
+          style={{ resize: "vertical", lineHeight: 1.45 }}
+        />
+        <button
+          className="btn primary sm"
+          onClick={startGenerate}
+          disabled={generating || !imgPrompt.trim()}
+          style={{ width: "100%", justifyContent: "center" }}
+        >
+          {generating ? (
+            <><Icon.Refresh size={12} className="ico animate-spin"/> Generating…</>
+          ) : (
+            <><Icon.Sparkles size={12}/> Generate Image</>
+          )}
+        </button>
+      </div>
+
+      {/* Status / result */}
+      {jobStatus === 'pending' && (
+        <div style={{ marginTop: 10, padding: 10, background: "rgba(37,99,235,0.06)", border: "1px solid rgba(37,99,235,0.2)", borderRadius: "var(--radius)", fontSize: 11.5, color: "var(--primary)" }}>
+          Queued in ComfyUI — polling for result…
+        </div>
+      )}
+      {jobStatus === 'done' && resultUrl && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ borderRadius: "var(--radius)", overflow: "hidden", border: "1px solid var(--border)", marginBottom: 8 }}>
+            <img src={resultUrl} alt="Generated" style={{ width: "100%", display: "block" }}/>
+          </div>
+          <button className="btn primary sm" onClick={addToCanvas} style={{ width: "100%", justifyContent: "center" }}>
+            <Icon.Plus size={12}/> Add to Canvas
+          </button>
+        </div>
+      )}
+      {jobStatus === 'error' && (
+        <div style={{ marginTop: 10, padding: 9, background: "rgba(220,38,38,0.06)", border: "1px solid rgba(220,38,38,0.2)", borderRadius: "var(--radius)", fontSize: 11.5, color: "#DC2626" }}>
+          Generation failed. Check ComfyUI is running with FLUX.1-schnell loaded.
+        </div>
+      )}
+
+      <div style={{ height: 14 }}/>
+      <CBPanelTitle>PROMPT PRESETS</CBPanelTitle>
+      <div className="col" style={{ gap: 6 }}>
+        {presets.map((p, i) => (
+          <button key={i} className="cb-add-btn" onClick={() => setImgPrompt(p.prompt)} style={{ flexDirection: "column", alignItems: "flex-start", padding: 9, gap: 2 }}>
+            <div style={{ fontWeight: 700, fontSize: 11.5 }}>{p.label}</div>
+            <div className="muted" style={{ fontSize: 10, lineHeight: 1.3, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: "100%" }}>{p.prompt}</div>
+          </button>
+        ))}
+      </div>
+
+      <div style={{ height: 14 }}/>
+      <CBPanelTitle>CANVAS SIZE</CBPanelTitle>
+      <div style={{ background: "var(--gray-50)", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: 8, fontSize: 11.5 }}>
+        <span className="muted">Generating at </span>
+        <span className="mono">{canvasSize?.w || 1080}×{canvasSize?.h || 1080}</span>
+        <span className="muted"> — change in the toolbar size picker</span>
       </div>
     </>
   );

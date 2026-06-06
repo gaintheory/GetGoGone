@@ -1,20 +1,9 @@
 import { NextResponse } from "next/server";
 import Papa from "papaparse";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { resolveDealershipId } from "@/lib/dealerships";
 import { parseInventoryCsv, autoDetectCsvMapping } from "@/features/inventory/intake/adapters/csv";
 import { runImportPipeline } from "@/features/inventory/intake/pipeline";
-
-async function getFirstDealershipId(supabase: any): Promise<string | null> {
-  const { data, error } = await supabase
-    .from("dealerships")
-    .select("id")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (error) return null;
-  return data?.id || null;
-}
 
 export async function POST(request: Request) {
   const supabase = getSupabaseAdmin();
@@ -73,7 +62,7 @@ export async function POST(request: Request) {
 
   // ─── Mode 2: Execution (Field Mapping is present) ──────────────────────────
   if (!dealershipId) {
-    dealershipId = await getFirstDealershipId(supabase);
+    dealershipId = await resolveDealershipId(supabase);
     if (!dealershipId) {
       return NextResponse.json(
         { error: "No dealership found in the database. Please create one first." },
@@ -170,7 +159,7 @@ export async function GET(request: Request) {
   let dealershipId = searchParams.get("clientId");
 
   if (!dealershipId) {
-    dealershipId = await getFirstDealershipId(supabase);
+    dealershipId = await resolveDealershipId(supabase);
     if (!dealershipId) return NextResponse.json({ mapping: null });
   }
 

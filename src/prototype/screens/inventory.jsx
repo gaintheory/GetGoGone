@@ -24,41 +24,18 @@ function Inventory({ nav, vehicles: providedVehicles, clientId, inventorySource 
   
   // ZIP Intake UI state
   const [showZipModal, setShowZipModal] = React.useState(false);
-  const [folderPath, setFolderPath] = React.useState("C:\\Users\\crypt\\Desktop\\getgogone\\Inventory");
+  const [folderPath, setFolderPath] = React.useState("");
   const [overwriteExisting, setOverwriteExisting] = React.useState(false);
   const [dryRun, setDryRun] = React.useState(false);
   const [importing, setImporting] = React.useState(false);
   const [importResult, setImportResult] = React.useState(null);
   const [importError, setImportError] = React.useState(null);
-  const [importLogs, setImportLogs] = React.useState([]);
 
   const handleImport = async () => {
     setImporting(true);
     setImportError(null);
     setImportResult(null);
-    setImportLogs(["🔍 Scanning directory: " + (folderPath || "C:\\Users\\crypt\\Desktop\\getgogone\\Inventory")]);
-
-    const logs = [
-      "📦 Locating CarsForSale ZIP archive packages...",
-      "📂 Found active inventory zips. Decompressing package manifests...",
-      "🧠 Initializing local WASM Tesseract OCR engine...",
-      "⚡ Executing details-card OCR specs mapping (Price, VIN, Transmission)...",
-      "🚗 Running government-linked NHTSA vPIC VIN decode API query...",
-      "📤 Buffering dealership lot photos to Supabase Storage...",
-      "💾 Normalizing database upserts & inserting audit_log trails...",
-    ];
-
-    let currentLogs = ["🔍 Scanning directory: " + (folderPath || "C:\\Users\\crypt\\Desktop\\getgogone\\Inventory")];
-    let idx = 0;
-    const logInterval = setInterval(() => {
-      if (idx < logs.length) {
-        currentLogs = [...currentLogs, logs[idx]];
-        setImportLogs(currentLogs);
-        idx++;
-      } else {
-        clearInterval(logInterval);
-      }
-    }, 1200);
+    setImportLogs([]);
 
     try {
       const res = await fetch("/api/inventory/import/zip", {
@@ -82,7 +59,6 @@ function Inventory({ nav, vehicles: providedVehicles, clientId, inventorySource 
     } catch (err) {
       setImportError(err.message || String(err));
     } finally {
-      clearInterval(logInterval);
       setImporting(false);
     }
   };
@@ -122,8 +98,8 @@ function Inventory({ nav, vehicles: providedVehicles, clientId, inventorySource 
     setImportingCsv(true);
     setCsvError(null);
     try {
-      const clientId = providedVehicles?.[0]?.dealership_id || "";
-      const savedRes = await fetch(`/api/inventory/import/csv?clientId=${clientId}`);
+      const dealershipId = clientId && clientId !== "agency_overview" ? clientId : "";
+      const savedRes = await fetch(`/api/inventory/import/csv?clientId=${dealershipId}`);
       const savedData = await savedRes.json();
       
       const res = await fetch("/api/inventory/import/csv", {
@@ -162,51 +138,24 @@ function Inventory({ nav, vehicles: providedVehicles, clientId, inventorySource 
     setImportingCsv(true);
     setCsvError(null);
     setCsvStep(3);
-    setImportLogs([
-      "🔍 Opening uploaded file buffer...",
-      "📊 Parsing CSV layout structures using PapaParse..."
-    ]);
-
-    const logs = [
-      "🗺️ Running auto-matching synonym filters on columns...",
-      "🚗 Resolving VIN validations & structural spec mappings...",
-      "⚡ Executing NHTSA vPIC database specifications enrichment...",
-      "📤 Initializing external lot media download streams...",
-      "💾 Executing overwrite-safe database inserts...",
-      "📈 Appending publishing and audit logs..."
-    ];
-
-    let currentLogs = [
-      "🔍 Opening uploaded file buffer...",
-      "📊 Parsing CSV layout structures using PapaParse..."
-    ];
-    let idx = 0;
-    const logInterval = setInterval(() => {
-      if (idx < logs.length) {
-        currentLogs = [...currentLogs, logs[idx]];
-        setImportLogs(currentLogs);
-        idx++;
-      } else {
-        clearInterval(logInterval);
-      }
-    }, 1200);
+    setImportLogs([]);
 
     try {
-      const clientId = providedVehicles?.[0]?.dealership_id || "";
+      const dealershipId = clientId && clientId !== "agency_overview" ? clientId : "";
       const res = await fetch("/api/inventory/import/csv", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           csvText,
           fieldMapping: customMapping,
-          dealershipId: clientId,
+          dealershipId,
           overwriteExisting: overwriteCsv,
           dryRun: dryRunCsv,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "CSV import pipeline failed.");
-      
+
       setCsvResult(data);
       setCsvStep(4);
       if (onReload && !dryRunCsv) {
@@ -216,7 +165,6 @@ function Inventory({ nav, vehicles: providedVehicles, clientId, inventorySource 
       setCsvError(err.message || String(err));
       setCsvStep(2);
     } finally {
-      clearInterval(logInterval);
       setImportingCsv(false);
     }
   };
@@ -282,12 +230,12 @@ function Inventory({ nav, vehicles: providedVehicles, clientId, inventorySource 
     setSavingManual(true);
     setManualError(null);
     try {
-      const clientId = providedVehicles?.[0]?.dealership_id || "";
+      const dealershipId = clientId && clientId !== "agency_overview" ? clientId : "";
       const res = await fetch("/api/inventory/import/manual", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          dealershipId: clientId,
+          dealershipId,
           vehicle: {
             vin: manualVin,
             stockNumber: manualStock,
@@ -389,7 +337,7 @@ function Inventory({ nav, vehicles: providedVehicles, clientId, inventorySource 
     }
   };
 
-  const vehicles = providedVehicles && providedVehicles.length ? providedVehicles : VEHICLES;
+  const vehicles = providedVehicles || [];
   const readinessById = React.useMemo(() => new Map(vehicles.map(v => [v.id, assessVehicleReadiness(v)])), [vehicles]);
 
   const filters = [
@@ -473,6 +421,20 @@ function Inventory({ nav, vehicles: providedVehicles, clientId, inventorySource 
         </div>
       )}
 
+      {vehicles.length === 0 ? (
+        <div className="card" style={{ padding: 36, textAlign: "center" }}>
+          <Icon.Car size={36} className="ico" style={{ opacity: 0.4, marginBottom: 8 }}/>
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>No vehicles in this client&apos;s inventory yet.</div>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 14 }}>
+            Import a CarsForSale ZIP kit, upload a CSV, or add a vehicle manually to get started.
+          </div>
+          <div style={{ display: "flex", justifyContent: "center", gap: 8 }}>
+            <Btn icon={Icon.Upload} onClick={() => setShowZipModal(true)}>Import ZIP Kit</Btn>
+            <Btn icon={Icon.Upload} onClick={() => setShowCsvModal(true)}>Import CSV</Btn>
+            <Btn icon={Icon.Plus} variant="primary" onClick={() => setShowAddModal(true)}>Add vehicle</Btn>
+          </div>
+        </div>
+      ) : (
       <div className="card">
         <table className="tbl">
           <thead>
@@ -579,7 +541,9 @@ function Inventory({ nav, vehicles: providedVehicles, clientId, inventorySource 
           </tbody>
         </table>
       </div>
+      )}
 
+      {vehicles.length > 0 && (
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 10, fontSize: 11.5 }} className="muted">
         <span>Showing {rows.length} of {vehicles.length} vehicles</span>
         <div className="row">
@@ -588,6 +552,7 @@ function Inventory({ nav, vehicles: providedVehicles, clientId, inventorySource 
           <Btn size="sm" variant="ghost" icon={Icon.ChevronRight}/>
         </div>
       </div>
+      )}
 
       {/* ZIP Import Modal */}
       {showZipModal && (
@@ -681,7 +646,7 @@ function Inventory({ nav, vehicles: providedVehicles, clientId, inventorySource 
                       }}
                     />
                     <span style={{ fontSize: 11.5, color: "rgba(255, 255, 255, 0.4)" }}>
-                      Defaults to the local active inventory repository.
+                      Absolute path on the server where CarsForSale ZIP kits are staged. Leave blank to use the project&apos;s <code>Inventory/</code> folder.
                     </span>
                   </div>
 
@@ -716,49 +681,19 @@ function Inventory({ nav, vehicles: providedVehicles, clientId, inventorySource 
               )}
 
               {importing && (
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", justifyContent: "center", padding: "20px 0", gap: 16 }}>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-                    <div className="spinner" style={{
-                      width: 32,
-                      height: 32,
-                      border: "3px solid rgba(59, 130, 246, 0.2)",
-                      borderTop: "3px solid #3b82f6",
-                      borderRadius: "50%",
-                      animation: "spin 1s linear infinite"
-                    }}/>
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontWeight: 600, fontSize: 14 }}>Processing ZIP Inventory Kits...</div>
-                      <div style={{ color: "rgba(255, 255, 255, 0.5)", fontSize: 12, marginTop: 4 }}>
-                        Extracting files, executing OCR on spec cards, and running VIN decodes...
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Terminal Log Console */}
-                  <div style={{
-                    background: "#0f172a",
-                    border: "1px solid rgba(255, 255, 255, 0.05)",
-                    borderRadius: 8,
-                    padding: 12,
-                    fontFamily: "monospace",
-                    fontSize: 11.5,
-                    color: "#38bdf8",
-                    maxHeight: 180,
-                    overflowY: "auto",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 6,
-                    boxShadow: "inset 0 2px 8px rgba(0,0,0,0.8)"
-                  }}>
-                    {importLogs.map((log, i) => (
-                      <div key={i} style={{ display: "flex", gap: 8 }}>
-                        <span style={{ color: "rgba(255,255,255,0.25)", flexShrink: 0 }}>&gt;</span>
-                        <span style={{ color: i === importLogs.length - 1 ? "#38bdf8" : "rgba(56,189,248,0.7)" }}>{log}</span>
-                      </div>
-                    ))}
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>
-                      <span className="spinner" style={{ width: 8, height: 8, border: "2.5px solid rgba(255,255,255,0.1)", borderTop: "2.5px solid rgba(255,255,255,0.4)", borderRadius: "50%", animation: "spin 1.5s linear infinite" }}/>
-                      <span style={{ fontSize: 11 }}>Active intake pipeline rendering...</span>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "48px 0", gap: 14 }}>
+                  <div className="spinner" style={{
+                    width: 36,
+                    height: 36,
+                    border: "3px solid rgba(59, 130, 246, 0.2)",
+                    borderTop: "3px solid #3b82f6",
+                    borderRadius: "50%",
+                    animation: "spin 1s linear infinite"
+                  }}/>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>Importing ZIP kits...</div>
+                    <div style={{ color: "rgba(255, 255, 255, 0.5)", fontSize: 12, marginTop: 4 }}>
+                      This can take a minute for large batches. Results will appear when the import finishes.
                     </div>
                   </div>
                 </div>
@@ -1198,49 +1133,19 @@ function Inventory({ nav, vehicles: providedVehicles, clientId, inventorySource 
 
               {/* STEP 3: Loading Screen */}
               {csvStep === 3 && (
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "stretch", justifyContent: "center", padding: "20px 0", gap: 16 }}>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-                    <div className="spinner" style={{
-                      width: 32,
-                      height: 32,
-                      border: "3px solid rgba(16, 185, 129, 0.2)",
-                      borderTop: "3px solid #10b981",
-                      borderRadius: "50%",
-                      animation: "spin 1s linear infinite"
-                    }}/>
-                    <div style={{ textAlign: "center" }}>
-                      <div style={{ fontWeight: 600, fontSize: 14 }}>Importing CSV Records...</div>
-                      <div style={{ color: "rgba(255, 255, 255, 0.5)", fontSize: 12, marginTop: 4 }}>
-                        Creating vehicles, downloading photo streams, and updating database indexes...
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Terminal Log Console */}
-                  <div style={{
-                    background: "#0f172a",
-                    border: "1px solid rgba(255, 255, 255, 0.05)",
-                    borderRadius: 8,
-                    padding: 12,
-                    fontFamily: "monospace",
-                    fontSize: 11.5,
-                    color: "#34d399",
-                    maxHeight: 180,
-                    overflowY: "auto",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 6,
-                    boxShadow: "inset 0 2px 8px rgba(0,0,0,0.8)"
-                  }}>
-                    {importLogs.map((log, i) => (
-                      <div key={i} style={{ display: "flex", gap: 8 }}>
-                        <span style={{ color: "rgba(255,255,255,0.25)", flexShrink: 0 }}>&gt;</span>
-                        <span style={{ color: i === importLogs.length - 1 ? "#34d399" : "rgba(52,211,153,0.7)" }}>{log}</span>
-                      </div>
-                    ))}
-                    <div style={{ display: "flex", alignItems: "center", gap: 6, color: "rgba(255,255,255,0.3)", marginTop: 2 }}>
-                      <span className="spinner" style={{ width: 8, height: 8, border: "2.5px solid rgba(255,255,255,0.1)", borderTop: "2.5px solid rgba(255,255,255,0.4)", borderRadius: "50%", animation: "spin 1.5s linear infinite" }}/>
-                      <span style={{ fontSize: 11 }}>Active intake pipeline rendering...</span>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "48px 0", gap: 14 }}>
+                  <div className="spinner" style={{
+                    width: 36,
+                    height: 36,
+                    border: "3px solid rgba(16, 185, 129, 0.2)",
+                    borderTop: "3px solid #10b981",
+                    borderRadius: "50%",
+                    animation: "spin 1s linear infinite"
+                  }}/>
+                  <div style={{ textAlign: "center" }}>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>Importing CSV records...</div>
+                    <div style={{ color: "rgba(255, 255, 255, 0.5)", fontSize: 12, marginTop: 4 }}>
+                      This can take a minute for large files. Results will appear when the import finishes.
                     </div>
                   </div>
                 </div>

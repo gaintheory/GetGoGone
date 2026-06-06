@@ -12,7 +12,7 @@ const MAX_REWRITE_ATTEMPTS = 3;
 function CampaignPackage({ nav, toast, vehicles: providedVehicles, clientId, routeState }) {
   const { VEHICLES, fmt$, fmtMi } = GGG;
   const { Pill, Btn, VehicleThumb } = UI;
-  const vehicles = providedVehicles && providedVehicles.length ? providedVehicles : VEHICLES;
+  const vehicles = providedVehicles || [];
   const initialVehicleId = typeof routeState === "object" && routeState?.vehicleId ? routeState.vehicleId : vehicles[0]?.id || "";
   const initialChannelIds = typeof routeState === "object" && routeState?.channelIds?.length ? routeState.channelIds : DEFAULT_CHANNELS;
   const [vehicleId, setVehicleId] = React.useState(initialVehicleId);

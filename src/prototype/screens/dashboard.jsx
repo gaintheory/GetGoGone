@@ -45,15 +45,15 @@ function Dashboard({ nav, clientId, toast }) {
     toast(`🤖 Background Agent ${agentKey.replace("_", " ")} configuration updated!`);
   };
 
-  // Fetch proposals, campaigns, and vehicles
+  // Fetch proposals, campaigns, and vehicles — no writes from this load.
+  // Demo proposals can be seeded manually via scripts/seed-demo-proposals.mjs.
   const loadCockpitData = React.useCallback(async () => {
     let active = true;
     setLoading(true);
-    
+
     const params = clientId && clientId !== "agency_overview" ? `?clientId=${encodeURIComponent(clientId)}` : "";
-    
+
     try {
-      // 1. Fetch campaigns and inventory
       const [campaignRes, inventoryRes, proposalsRes] = await Promise.all([
         fetch(`/api/campaigns${params}`).then(res => res.json()),
         fetch(`/api/inventory${params}`).then(res => res.json()),
@@ -62,128 +62,9 @@ function Dashboard({ nav, clientId, toast }) {
 
       if (!active) return;
 
-      const loadedCampaigns = campaignRes?.ok ? campaignRes.campaigns || [] : [];
-      const loadedVehicles = inventoryRes?.ok ? inventoryRes.vehicles || [] : [];
-      let loadedProposals = proposalsRes?.ok ? proposalsRes.proposals || [] : [];
-
-      setCampaigns(loadedCampaigns);
-      setDbVehicles(loadedVehicles);
-
-      // 2. Self-Healing Auto-Seeder if agent proposals queue is empty
-      if (loadedProposals.length === 0 && loadedVehicles.length > 0) {
-        const testVehicles = loadedVehicles.slice(0, 4);
-        const seeds = [
-          {
-            sourceKey: `watcher:${testVehicles[0]?.id || "v1"}:20260523`,
-            agentType: "watcher",
-            targetType: "vehicle",
-            targetId: testVehicles[0]?.id || "v1",
-            proposalType: "campaign_generation",
-            title: `Fresh Intake: Propose ${testVehicles[0]?.year || 2019} ${testVehicles[0]?.make || "Jeep"} campaign`,
-            reasoning: `Lot arrival lacks active campaigns. Proposing a high-intent Craigslist and GBP organic ad bundle.`,
-            riskLevel: "low",
-            proposedPayload: { vehicleId: testVehicles[0]?.id, vehicleName: `${testVehicles[0]?.year} ${testVehicles[0]?.make} ${testVehicles[0]?.model}` }
-          },
-          {
-            sourceKey: `spanish_copywriter:${testVehicles[1]?.id || "v2"}:20260523`,
-            agentType: "spanish_copywriter",
-            targetType: "vehicle",
-            targetId: testVehicles[1]?.id || "v2",
-            proposalType: "spanish_bilingual_reach",
-            title: `Bilingual Outreach: Draft ${testVehicles[1]?.make || "Ford"} Spanish ad`,
-            reasoning: `Top search brand in local bilingual demographics has no Spanish campaigns. Proposing a down payment Craigslist spanish copy package.`,
-            riskLevel: "medium",
-            proposedPayload: { vehicleId: testVehicles[1]?.id, vehicleName: `${testVehicles[1]?.year} ${testVehicles[1]?.make} ${testVehicles[1]?.model}` }
-          },
-          {
-            sourceKey: `compliance_checker:${testVehicles[2]?.id || "v3"}:20260523`,
-            agentType: "compliance_checker",
-            targetType: "campaign_channel",
-            targetId: testVehicles[2]?.id || "v3",
-            proposalType: "compliance_disclaimer_fix",
-            title: `FTC Compliance Fix: missing payment disclaimer`,
-            reasoning: `Ad draft lists payment claim ($120/wk) without declaring down payment or financing APR margins, violating FTC Reg Z bounds.`,
-            riskLevel: "high",
-            proposedPayload: { vehicleId: testVehicles[2]?.id, channelId: "craigslist", fixField: "primary_text" }
-          },
-          {
-            sourceKey: `creative_refresher:${testVehicles[3]?.id || "v4"}:20260523`,
-            agentType: "creative_refresher",
-            targetType: "vehicle",
-            targetId: testVehicles[3]?.id || "v4",
-            proposalType: "creative_overlay_refresh",
-            title: `Creative Decay: Refresh ${testVehicles[3]?.make || "Toyota"} ad canvas`,
-            reasoning: `Visual ad template running 21 days has click-through rate sliding below 1.5%. Proposing overlay template update.`,
-            riskLevel: "medium",
-            proposedPayload: { vehicleId: testVehicles[3]?.id, canvasTemplate: "craigslist_lead_image" }
-          }
-        ];
-
-        // Seed to Supabase
-        const seedRes = await fetch("/api/agents/proposals", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            clientId: clientId !== "agency_overview" ? clientId : null,
-            proposals: seeds
-          })
-        });
-
-        const seedData = await seedRes.json();
-        if (seedRes.ok && seedData.ok) {
-          loadedProposals = seedData.proposals || [];
-        }
-      }
-
-      // 3. Dynamic compliance scan for vehicle history reports missing history badge/QR code overlays
-      const vehicleSourceListForScan = loadedVehicles.length > 0 ? loadedVehicles : VEHICLES;
-      const historyReportVehicles = vehicleSourceListForScan.filter(v => v.sourceUrl && v.sourceUrl.trim().length > 0);
-      
-      const newProposalsToSeed = [];
-      for (const vehicle of historyReportVehicles) {
-        // Check if there is already a proposal (pending or decided) for this vehicle's history badge compliance
-        const hasHistoryProposal = loadedProposals.some(p => 
-          p.agent_type === "compliance_checker" && 
-          p.target_id === String(vehicle.id) && 
-          p.proposal_type === "compliance_history_badge"
-        );
-        
-        if (!hasHistoryProposal) {
-          newProposalsToSeed.push({
-            sourceKey: `compliance_history:${vehicle.id}:${new Date().toISOString().split('T')[0]}`,
-            agentType: "compliance_checker",
-            targetType: "vehicle",
-            targetId: vehicle.id,
-            proposalType: "compliance_history_badge",
-            title: `Compliance: Missing History badge on Craigslist flyer for ${vehicle.year} ${vehicle.make} ${vehicle.model}`,
-            reasoning: `Vehicle has a verified history report URL attached (${vehicle.sourceUrl}), but no history badge or QR code overlay is present on its active visual campaign templates. Proposing designer action to maintain transparency.`,
-            riskLevel: "medium",
-            proposedPayload: { vehicleId: vehicle.id, launchDesigner: true }
-          });
-        }
-      }
-
-      if (newProposalsToSeed.length > 0) {
-        const seedRes = await fetch("/api/agents/proposals", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            clientId: clientId !== "agency_overview" ? clientId : null,
-            proposals: newProposalsToSeed
-          })
-        });
-        const seedData = await seedRes.json();
-        if (seedRes.ok && seedData.ok) {
-          const freshProposals = seedData.proposals || [];
-          // Merge freshly seeded history proposals
-          loadedProposals = [
-            ...loadedProposals,
-            ...freshProposals.filter(fp => !loadedProposals.some(lp => lp.id === fp.id))
-          ];
-        }
-      }
-
-      setProposals(loadedProposals);
+      setCampaigns(campaignRes?.ok ? campaignRes.campaigns || [] : []);
+      setDbVehicles(inventoryRes?.ok ? inventoryRes.vehicles || [] : []);
+      setProposals(proposalsRes?.ok ? proposalsRes.proposals || [] : []);
     } catch (err) {
       console.error("Error loading cockpit data:", err);
     } finally {
@@ -253,13 +134,13 @@ function Dashboard({ nav, clientId, toast }) {
     }
   };
 
-  // Compile calculations
-  const vehicleSourceList = dbVehicles.length > 0 ? dbVehicles : VEHICLES;
+  // Compile calculations from real DB data only.
+  const vehicleSourceList = dbVehicles;
   const activeCount = vehicleSourceList.filter(v => v.status !== "Sold").length;
   const needsAttention = vehicleSourceList.filter(v => ["Needs Photos","Missing Payment","Needs Refresh"].includes(v.status) || v.campaign === "Needs Refresh");
   const aging = vehicleSourceList.map((v, i) => ({ ...v, daysIn: v.lotAge || ((i * 9 + 11) % 45) + 5 })).filter(v => v.daysIn >= 30).sort((a,b) => b.daysIn - a.daysIn);
-  const newLeadsToday = LEADS.filter(l => l.when.includes("min") || l.when.includes("hr ago")).length;
-  const activeCampaigns = campaigns.length > 0 ? campaigns.length : vehicleSourceList.filter(v => ["Published","Ready to Review"].includes(v.campaign)).length;
+  const newLeadsToday = 0; // Real leads system arrives in #4b; demo LEADS array removed.
+  const activeCampaigns = campaigns.length;
 
   // Filter proposals by settings toggled ON
   const filteredProposals = proposals.filter(p => {

@@ -6,7 +6,7 @@ import { UI } from '../ui';
 function TestDrive({ nav, toast, vehicles: providedVehicles }) {
   const { VEHICLES, fmt$, fmtMi } = GGG;
   const { Pill, Btn, VehicleThumb } = UI;
-  const allVehicles = providedVehicles && providedVehicles.length ? providedVehicles : VEHICLES;
+  const allVehicles = providedVehicles || [];
 
   const [source, setSource] = React.useState("Walk-in");
   const [name, setName] = React.useState("");
