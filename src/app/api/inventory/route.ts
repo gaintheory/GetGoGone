@@ -7,6 +7,8 @@ import {
 } from "@/features/inventory/prototype-adapter";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { resolveDealershipId } from "@/lib/dealerships";
+import { isAutodossConfigured, listDealers, listInventory } from "@/lib/autodoss/client";
+import { fromAutodossInventory } from "@/lib/autodoss/adapter";
 
 async function sourceInventory(supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>) {
   const { data, error } = await supabase
@@ -19,6 +21,32 @@ async function sourceInventory(supabase: NonNullable<ReturnType<typeof getSupaba
 }
 
 export async function GET(request: Request) {
+  const clientId = new URL(request.url).searchParams.get("clientId");
+
+  // Primary path: read live from AutoDoss over the Data API — no shared DB.
+  // (Archived vehicles are intentionally excluded; we don't market them.)
+  if (isAutodossConfigured()) {
+    try {
+      const dealershipId = clientId || (await listDealers({ limit: 1 }))[0]?.id;
+      if (!dealershipId) {
+        return NextResponse.json({ configured: true, source: "AutoDoss API", vehicles: [] });
+      }
+      const items = await listInventory(dealershipId);
+      return NextResponse.json({
+        configured: true,
+        source: "AutoDoss API",
+        vehicles: items.map(fromAutodossInventory),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to load inventory.";
+      return NextResponse.json(
+        { configured: true, vehicles: [], error: message },
+        { status: 502 },
+      );
+    }
+  }
+
+  // Fallback path: direct shared-DB reads (legacy, pre-API).
   const supabase = getSupabaseAdmin();
 
   if (!supabase) {
@@ -28,8 +56,6 @@ export async function GET(request: Request) {
       error: "Supabase environment variables are not configured.",
     });
   }
-
-  const clientId = new URL(request.url).searchParams.get("clientId");
 
   try {
     if (clientId) {

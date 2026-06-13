@@ -15,6 +15,7 @@ const PUBLIC_PATHS = new Set<string>([
 // without a session cookie. Use prefix matching.
 const PUBLIC_API_PREFIXES: string[] = [
   "/api/leads/inbound",       // public web-inquiry form posts here
+  "/api/autodoss/webhook",    // AutoDoss inventory pings; verified by HMAC signature
   // "/api/inventory/webhook", // intentionally still gated until Phase 4.2
 ];
 
