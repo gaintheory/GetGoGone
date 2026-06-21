@@ -1,5 +1,13 @@
 ﻿# Architecture
 
+> **2026-06 redesign:** GGG is a creative + distribution engine reading from the
+> AutoDoss Data API (read-only `/dealers`, `/inventory`, `/customers`). Inventory,
+> CRM, and lead conversation live in AutoDoss, not here. The local `vehicles` /
+> `leads` tables and inventory-ingestion routes are legacy and staged for removal
+> (they cause a split-brain with AutoDoss-sourced inventory). See
+> `docs/REDESIGN_2026-06.md` for the seam, the missing `POST /api/v1/leads` rung,
+> and the distribution (feed + video) plan.
+
 Recommended stack:
 - Next.js App Router
 - TypeScript

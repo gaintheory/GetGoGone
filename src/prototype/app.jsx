@@ -19,6 +19,8 @@ import { AgencyCockpit } from './screens/agency-cockpit';
 import { BrandBrain } from './screens/brand-brain';
 import { AiLibrary } from './screens/ai-library';
 import { VideoStudio } from './screens/video-studio';
+import { VehicleHub } from './screens/vehicle-hub';
+import { Conveyor } from './screens/conveyor';
 import { channelModules } from '../features/campaigns/channel-modules';
 
 function App() {
@@ -120,23 +122,32 @@ function App() {
     if (route.screen === "campaignReview") nav("campaigns");
   };
 
+  // 2026-06 redesign: GGG = creative + distribution engine on top of AutoDoss.
+  // Nav is grouped to surface the focused workflow (Produce / Distribute) and
+  // demote screens whose responsibility now belongs to AutoDoss (CRM, etc.).
+  // Everything stays reachable until the in-person cleanup. See docs/REDESIGN_2026-06.md.
   const navItems = [
-    { id: "agency", label: "Agency", icon: Icon.Chart },
-    { id: "cockpit", label: "Cockpit", icon: Icon.CheckCircle },
-    { id: "brandBrain", label: "Brand Brain", icon: Icon.Sparkles },
-    { id: "aiLibrary", label: "AI Library", icon: Icon.FileText },
-    { id: "dashboard", label: "Dashboard", icon: Icon.Home },
-    { id: "inventory", label: "Inventory", icon: Icon.Car, count: vehicles.length },
-    { id: "campaigns", label: "Campaigns", icon: Icon.Megaphone },
-    { id: "packageBuilder", label: "Package Builder", icon: Icon.Folder },
-    { id: "designer", label: "Designer", icon: Icon.Sparkles },
-    { id: "videoStudio", label: "Video Studio", icon: Icon.Video },
-    { id: "creatives", label: "Creatives", icon: Icon.Image },
-    { id: "leads", label: "Leads", icon: Icon.Inbox },
-    { id: "testdrive", label: "Test Drive", icon: Icon.Mic },
-    { id: "marketing", label: "Marketing", icon: Icon.Send },
-    { id: "reports", label: "Reports", icon: Icon.Chart },
-    { id: "settings", label: "Settings", icon: Icon.Settings },
+    // Produce — the core GGG workflow
+    { id: "conveyor", label: "Conveyor", icon: Icon.Truck, section: "Produce" },
+    { id: "vehicleHub", label: "Vehicle Hub", icon: Icon.Zap, section: "Produce" },
+    { id: "inventory", label: "Inventory", icon: Icon.Car, count: vehicles.length, section: "Produce" },
+    { id: "campaigns", label: "Campaigns", icon: Icon.Megaphone, section: "Produce" },
+    { id: "packageBuilder", label: "Package Builder", icon: Icon.Folder, section: "Produce" },
+    { id: "designer", label: "Designer", icon: Icon.Sparkles, section: "Produce" },
+    { id: "videoStudio", label: "Video", icon: Icon.Video, section: "Produce" },
+    // Distribute & measure
+    { id: "creatives", label: "Creatives", icon: Icon.Image, section: "Distribute" },
+    { id: "marketing", label: "Distribution", icon: Icon.Send, section: "Distribute" },
+    { id: "reports", label: "Reports", icon: Icon.Chart, section: "Distribute" },
+    // Moving to AutoDoss / under review — kept reachable during transition
+    { id: "agency", label: "Agency", icon: Icon.Chart, section: "AutoDoss-owned" },
+    { id: "cockpit", label: "Cockpit", icon: Icon.CheckCircle, section: "AutoDoss-owned" },
+    { id: "brandBrain", label: "Brand Brain", icon: Icon.Sparkles, section: "AutoDoss-owned" },
+    { id: "aiLibrary", label: "AI Library", icon: Icon.FileText, section: "AutoDoss-owned" },
+    { id: "dashboard", label: "Dashboard", icon: Icon.Home, section: "AutoDoss-owned" },
+    { id: "leads", label: "Leads", icon: Icon.Inbox, section: "AutoDoss-owned" },
+    { id: "testdrive", label: "Test Drive", icon: Icon.Mic, section: "AutoDoss-owned" },
+    { id: "settings", label: "Settings", icon: Icon.Settings, section: "System" },
   ];
 
   // Campaigns screen redirects to builder for the demo
@@ -146,6 +157,8 @@ function App() {
     brandBrain: () => <BrandBrain clientId={activeClientId} activeClient={activeClient} toast={showToast}/>,
     aiLibrary: () => <AiLibrary clientId={activeClientId} activeClient={activeClient} toast={showToast} initialStatus={route.id?.status}/>,
     dashboard: () => <Dashboard nav={nav} clientId={activeClientId} toast={showToast}/>,
+    conveyor: () => <Conveyor nav={nav} toast={showToast} vehicles={vehicles}/>,
+    vehicleHub: () => <VehicleHub nav={nav} toast={showToast} vehicles={vehicles} vehicleId={typeof route.id === "string" ? route.id : undefined} clientId={activeClientId}/>,
     inventory: () => <Inventory nav={nav} vehicles={vehicles} clientId={activeClientId} inventorySource={inventorySource} onReload={() => setRefreshKey(k => k + 1)} toast={showToast}/>,
     vehicle: () => <VehicleDetail vehicleId={route.id} nav={nav} vehicles={vehicles} toast={showToast} onReload={() => setRefreshKey(k => k + 1)}/>,
     builder: () => <CampaignPackage nav={nav} toast={showToast} vehicles={vehicles} clientId={activeClientId} routeState={typeof route.id === "object" ? route.id : { vehicleId: route.id, source: "builder_redirect" }}/>,
@@ -202,22 +215,28 @@ function App() {
           </select>
         </div>
         <nav className="nav">
-          <div className="nav-section">Workspace</div>
-          {navItems.filter(n => n.id !== "settings").map(n => {
-            const I = n.icon;
-            return (
-              <button key={n.id} className={`nav-item ${activeNav === n.id ? "active" : ""}`} onClick={() => nav(n.id)}>
-                <I size={15} className="ico"/>
-                <span>{n.label}</span>
-                {n.count != null && <span className="count">{n.count}</span>}
-              </button>
-            );
-          })}
-          <div className="nav-section">System</div>
-          <button className={`nav-item ${activeNav === "settings" ? "active" : ""}`} onClick={() => nav("settings")}>
-            <Icon.Settings size={15} className="ico"/>
-            <span>Settings</span>
-          </button>
+          {["Produce", "Distribute", "AutoDoss-owned", "System"].map(section => (
+            <React.Fragment key={section}>
+              <div className="nav-section">{section}</div>
+              {navItems.filter(n => n.section === section).map(n => {
+                const I = n.icon;
+                const demoted = n.section === "AutoDoss-owned";
+                return (
+                  <button
+                    key={n.id}
+                    className={`nav-item ${activeNav === n.id ? "active" : ""}`}
+                    onClick={() => nav(n.id)}
+                    style={demoted ? { opacity: 0.55 } : undefined}
+                    title={demoted ? "Responsibility moving to AutoDoss — kept reachable during transition" : undefined}
+                  >
+                    <I size={15} className="ico"/>
+                    <span>{n.label}</span>
+                    {n.count != null && <span className="count">{n.count}</span>}
+                  </button>
+                );
+              })}
+            </React.Fragment>
+          ))}
         </nav>
         <div className="sidebar-foot">
           <div className="avatar">RL</div>

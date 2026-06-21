@@ -1,21 +1,28 @@
 ﻿# Product Scope
 
+> **2026-06 redesign:** GGG narrows to a **creative + omnichannel distribution
+> engine** on top of AutoDoss (the DMS + CRM system of record). It no longer owns
+> inventory intake, CRM, or lead conversation — those are AutoDoss. See
+> `docs/REDESIGN_2026-06.md`. The module list below is the legacy/pre-redesign
+> scope and is being trimmed accordingly.
+
 Primary users:
 - Owner or manager
 - Sales manager
 - Salespeople
 
-Core modules:
-- Inventory
-- Vehicle detail pages
+Core modules (post-redesign, focused IA):
+- Inventory (read-only AutoDoss browser — pick what to market)
 - Campaign builder with channel-specific marketing modules
-- Creative builder
-- Marketing composer
-- Lead management
-- Workflows and tasks
-- Reports
-- Integrations
+- Designer (per-vehicle creative; Konva canvas + ComfyUI image gen)
+- Video (short-form per-vehicle vertical video — Remotion)
+- Creatives asset library
+- Distribution (per-platform feeds + publishing + scheduling)
+- Reports (attribution read back from AutoDoss)
 - Settings
+
+Owned by AutoDoss, NOT GGG: inventory intake, customer CRM, the lead board,
+Twilio messaging, AI conversation/follow-up, lead scoring.
 
 Initial dealership reality:
 - Inventory and leads are currently handled in Carsforsale/MyCommandCenter.

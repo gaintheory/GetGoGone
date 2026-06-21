@@ -150,3 +150,23 @@ Net file count: `src/lib/dealerships.ts` and `src/features/ai/brand-brain.ts` ad
 
 
 
+
+## 2026-06-20 — GGG narrows to a creative + distribution engine
+
+AutoDoss (gaintheory/autodoss) is the DMS + CRM system of record. GetGoGone stops
+being a second DMS/CRM/lead-inbox and narrows to: per-vehicle creative + omnichannel
+distribution (ads, short-form video, feeds, publishing), handing leads to AutoDoss.
+
+Key points (full detail in `docs/REDESIGN_2026-06.md`):
+1. **Read-only AutoDoss Data API** (`/dealers`, `/inventory`, `/customers`) is the
+   inventory + brand + attribution source. GGG keeps no local copy.
+2. **Split-brain identified:** inventory comes from AutoDoss (`autodoss-{id}` string
+   ids) while leads/campaigns FK-join GGG's own `vehicles` table — they never connect.
+   Fix: campaigns/creatives reference vehicles by opaque AutoDoss string id, never FK.
+3. **Missing rung:** AutoDoss has no inbound lead endpoint. Add `POST /api/v1/leads`,
+   then delete GGG's leads/CRM entirely and close attribution via `utm_campaign`.
+4. **Brand from `/dealers`** replaces hand-maintained `defaultBrand` / Brand Brain dup.
+5. **Distribution = feed-based (Meta Catalog first) + post-based (TikTok/Shorts/Reels/GBP).**
+   Video wedge: Remotion per-vehicle vertical video, replacing the mock compiler.
+6. Staged deletions (inventory ingestion, leads tables, `eng.traineddata`) await the
+   in-person session — nothing destructive done yet this pass.
