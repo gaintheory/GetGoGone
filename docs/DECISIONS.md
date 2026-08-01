@@ -37,7 +37,7 @@ Use this file to record major project choices so the product does not drift.
 - Blank overlay creation is richer: Text now includes reusable building blocks such as vehicle title, offer footer, Spanish CTA, and marketplace info panel.
 - Designer save actions are no longer placeholder toasts. Save template persists a reusable `creative_templates` row with `category = custom_template`; Save version persists `category = saved_creative`. Saved templates reload into Designer > Templates, and saved creatives reload into Designer > Saved and the Creatives asset library.
 - Product direction is now agency-owner first: GetGoGone is being built as a personal multi-client marketing command center operated by the agency owner, not primarily as a salesperson self-serve SaaS. Salespeople may receive tasks/leads later, but campaign planning, AI generation, creative production, publishing, and reporting are centered on the operator.
-- `docs/AGENCY_ROADMAP.md` is the master roadmap for the agency command center direction. Roadmap schema/API entries are candidates until each phase gets a focused migration/implementation plan.
+- ~~`docs/AGENCY_ROADMAP.md` is the master roadmap for the agency command center direction.~~ Superseded by `docs/REDESIGN_2026-06.md` and deleted 2026-08-01.
 - Agency Foundation implementation has started. The app now opens to an Agency Command screen, loads clients from `/api/agency/clients`, stores `activeClientId` in local storage, and scopes inventory, campaign, creative-template, Designer, and Creatives API calls to the active client.
 - For now, one `dealerships` row equals one agency client. The default dealership continues to use the existing `inspection_vehicle_source` feed so current Right Price inventory stays intact while future clients can use normalized `vehicles` rows.
 - Marketing Cockpit implementation has started as a derived queue, not a persisted task table. `/api/agency/cockpit` scans inventory, campaigns, and saved creatives to flag missing offers, missing usable photos, missing first campaigns, missing Spanish campaigns, missing saved creatives, and draft campaigns needing review.
@@ -252,3 +252,24 @@ answer to "I forgot the password" is to set a new one.
 
 Assume anything previously exposed at a public URL was publicly readable. Rotate
 `SUPABASE_SERVICE_ROLE_KEY` and `SITE_PASSWORD` if the app was ever deployed.
+
+## 2026-08-01 — Executed part of the staged June cleanup
+
+`REDESIGN_2026-06.md` listed deletions that were staged pending an in-person session.
+Two are unambiguous and are now done:
+
+- **Test Drive screen** — scope creep for a distribution engine, no dependencies.
+- **`AGENCY_ROADMAP.md`, `AGENTIC_IMPLEMENTATION_STRATEGY.md`,
+  `agency_transformation_proposal.md`** — ~58 KB of strategy superseded by
+  `REDESIGN_2026-06.md`, which says so explicitly.
+
+**Inventory ingestion was deliberately NOT deleted**, contrary to the earlier plan to
+remove it in this pass. The reasoning changed on inspection: AutoDoss is the intended
+owner of intake, but `AUTODOSS_API_URL` is not configured in any environment we can
+verify, and when it is absent `/api/inventory` falls back to GetGoGone's own `vehicles`
+table. CSV/VIN/ZIP/manual import is the only way to populate that table. Deleting it
+before AutoDoss is confirmed live would leave no way to add a vehicle at all.
+
+Delete it once AutoDoss inventory is verified working against a real dealer — not
+before. The leads subsystem stays for the same class of reason: it cannot go until
+AutoDoss exposes `POST /api/v1/leads`.

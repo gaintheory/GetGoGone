@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getSupabaseAdmin } from "@/lib/supabase/server";
+import { toJsonObject } from "@/lib/json";
 
 /**
  * Public inbound web-inquiry endpoint.
@@ -67,7 +68,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "vehicleId is required." }, { status: 400 });
   }
 
-  const client = supabase as any;
+  const client = supabase;
   const { data: vehicle, error: vehicleError } = await client
     .from("vehicles")
     .select("id, dealership_id, year, make, model")
@@ -110,7 +111,7 @@ export async function POST(request: Request) {
       source_channel: payload.sourceChannel?.trim() || null,
       status: "new",
       notes: payload.message?.trim() || null,
-      utm: payload.utm && typeof payload.utm === "object" ? payload.utm : {},
+      utm: toJsonObject(payload.utm),
       inbound_url: payload.inboundUrl?.slice(0, 2000) || null,
       inbound_ip: clientIp(request),
       inbound_user_agent: request.headers.get("user-agent")?.slice(0, 500) || null,
@@ -128,11 +129,11 @@ export async function POST(request: Request) {
     dealership_id: lead.dealership_id,
     activity_type: "note",
     body: `Web inquiry from landing page for ${vehicle.year} ${vehicle.make} ${vehicle.model}.`,
-    metadata: {
+    metadata: toJsonObject({
       utm: payload.utm || {},
       sourceChannel: payload.sourceChannel || null,
       message: payload.message || null,
-    },
+    }),
     actor: "web",
   });
 

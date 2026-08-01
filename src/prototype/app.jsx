@@ -11,7 +11,6 @@ import { CampaignPackage } from './screens/campaign-package';
 import { CreativeBuilder } from './screens/creative-builder';
 import { Creatives } from './screens/creatives';
 import { Leads } from './screens/leads';
-import { TestDrive } from './screens/test-drive';
 import { Marketing } from './screens/marketing';
 import { Reports } from './screens/reports';
 import { Settings } from './screens/settings';
@@ -174,7 +173,6 @@ function App() {
     { id: "aiLibrary", label: "AI Library", icon: Icon.FileText, section: "AutoDoss-owned" },
     { id: "dashboard", label: "Dashboard", icon: Icon.Home, section: "AutoDoss-owned" },
     { id: "leads", label: "Leads", icon: Icon.Inbox, section: "AutoDoss-owned" },
-    { id: "testdrive", label: "Test Drive", icon: Icon.Mic, section: "AutoDoss-owned" },
     { id: "settings", label: "Settings", icon: Icon.Settings, section: "System" },
   ];
 
@@ -197,13 +195,12 @@ function App() {
     designer: () => <CreativeBuilder vehicleId={route.id} nav={nav} toast={showToast} vehicles={vehicles} clientId={activeClientId}/>,
     videoStudio: () => <VideoStudio nav={nav} toast={showToast} vehicles={vehicles} clientId={activeClientId}/>,
     leads: () => <Leads nav={nav} toast={showToast} clientId={activeClientId} vehicles={vehicles}/>,
-    testdrive: () => <TestDrive nav={nav} toast={showToast} vehicles={vehicles}/>,
     marketing: () => <Marketing nav={nav} toast={showToast} vehicles={vehicles}/>,
     reports: () => <Reports nav={nav} clientId={activeClientId} toast={showToast}/>,
     settings: () => <Settings toast={showToast}/>,
   };
 
-  const isFullBleed = ["leads", "designer", "testdrive"].includes(route.screen);
+  const isFullBleed = ["leads", "designer"].includes(route.screen);
 
   const activeNav = route.screen === "vehicle" ? "inventory" :
                     route.screen === "builder" ? "campaigns" :
