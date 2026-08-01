@@ -29,7 +29,6 @@ function VideoStudio({ nav, toast, vehicles: providedVehicles, clientId }) {
   // Mock Render Timeline State
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [currentTime, setCurrentTime] = React.useState(0);
-  const [activeSceneIndex, setActiveSceneIndex] = React.useState(0);
   const [compiling, setCompiling] = React.useState(false);
   const [compiledAsset, setCompiledAsset] = React.useState(null);
 
@@ -56,17 +55,18 @@ function VideoStudio({ nav, toast, vehicles: providedVehicles, clientId }) {
     return () => clearInterval(interval);
   }, [isPlaying, duration]);
 
-  // Sync active scene based on currentTime
-  React.useEffect(() => {
-    if (!storyboard || storyboard.length === 0) return;
+  // The active scene is fully derived from currentTime + storyboard, so compute it
+  // during render rather than mirroring it into state from an effect. The old
+  // version setState'd inside an effect, which cascades an extra render on every
+  // 100ms playback tick — and left activeSceneIndex stale for one frame each tick.
+  const activeSceneIndex = React.useMemo(() => {
+    if (!storyboard || storyboard.length === 0) return 0;
     let accumulatedTime = 0;
     for (let i = 0; i < storyboard.length; i++) {
       accumulatedTime += storyboard[i].durationSeconds || 0;
-      if (currentTime <= accumulatedTime) {
-        setActiveSceneIndex(i);
-        break;
-      }
+      if (currentTime <= accumulatedTime) return i;
     }
+    return storyboard.length - 1;
   }, [currentTime, storyboard]);
 
   const handleGenerateScript = async () => {
