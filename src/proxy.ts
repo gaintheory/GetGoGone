@@ -18,6 +18,23 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { COOKIE_NAME, verifyCookieValue } from "@/lib/auth/cookie";
 
+/**
+ * Local development escape hatch: set DISABLE_AUTH_GATE=true in .env.local to skip
+ * the password prompt entirely while working on the app.
+ *
+ * This is hard-wired off in production. `NODE_ENV` is set to "production" by
+ * `next build` / `next start` and by every hosting platform, and it is not settable
+ * from .env.local in a way that survives a production build — so this flag cannot
+ * open a deployed site no matter how the environment is configured. That guard is
+ * the whole reason this is safe to have: an unguarded bypass is precisely the bug
+ * that left every route public before.
+ */
+const AUTH_GATE_DISABLED =
+  process.env.NODE_ENV !== "production" &&
+  process.env.DISABLE_AUTH_GATE === "true";
+
+let warnedAboutDisabledGate = false;
+
 // Paths that bypass auth entirely.
 const PUBLIC_PATHS = new Set<string>([
   "/login",
@@ -64,6 +81,18 @@ function isPublic(pathname: string): boolean {
 
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
+
+  if (AUTH_GATE_DISABLED) {
+    if (!warnedAboutDisabledGate) {
+      warnedAboutDisabledGate = true;
+      console.warn(
+        "\n  ⚠  AUTH GATE DISABLED — DISABLE_AUTH_GATE=true is set in development.\n" +
+        "     Every page and API route is served without a session.\n" +
+        "     Remove it from .env.local to restore the password prompt.\n"
+      );
+    }
+    return NextResponse.next();
+  }
 
   if (isPublic(pathname)) {
     return NextResponse.next();

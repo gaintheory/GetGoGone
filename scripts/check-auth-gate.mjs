@@ -100,9 +100,14 @@ async function main() {
   if (failures > 0) {
     console.error(
       `\n${failures} check(s) failed.\n\n` +
-      `If the page checks returned 200, the gate is not running at all. Confirm that\n` +
-      `src/proxy.ts exists (beside src/app, NOT in the repository root) and exports a\n` +
-      `function named 'proxy'. Next.js 16 renamed the middleware convention to proxy.`
+      `If the page checks returned 200, the gate is not enforcing. Two likely causes:\n\n` +
+      `  1. DISABLE_AUTH_GATE=true is set in .env.local. That is the intentional\n` +
+      `     development bypass — remove the line to restore the password prompt.\n` +
+      `     (It is ignored in production builds, so it cannot explain a failure\n` +
+      `     against a deployed URL.)\n\n` +
+      `  2. The gate is not running at all. Confirm src/proxy.ts exists — beside\n` +
+      `     src/app, NOT in the repository root — and exports a function named\n` +
+      `     'proxy'. Next.js 16 renamed the middleware convention to proxy.`
     );
     process.exit(1);
   }

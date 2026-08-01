@@ -27,6 +27,18 @@ That writes `SITE_PASSWORD` to `.env.local` and generates `SITE_AUTH_COOKIE_SECR
 if it is missing. Restart the dev server and sign in at `/login`. When deployed, change
 `SITE_PASSWORD` in your host's environment settings instead and redeploy.
 
+**Just want in without a password while you work?** Add this to `.env.local`:
+
+```env
+DISABLE_AUTH_GATE=true
+```
+
+The gate is skipped and the server prints a warning on the first request. This is
+**ignored in production builds** — `next build` / `next start` and every hosting
+platform set `NODE_ENV=production`, and the flag is only read when `NODE_ENV` is not
+production, so it cannot open a deployed site. Verified: a production build with the
+flag set still redirects to `/login` and still returns 401 on APIs.
+
 After any change to the gate, confirm it is still enforcing:
 
 ```bash

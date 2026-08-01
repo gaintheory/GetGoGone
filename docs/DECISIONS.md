@@ -273,3 +273,21 @@ before AutoDoss is confirmed live would leave no way to add a vehicle at all.
 Delete it once AutoDoss inventory is verified working against a real dealer — not
 before. The leads subsystem stays for the same class of reason: it cannot go until
 AutoDoss exposes `POST /api/v1/leads`.
+
+## 2026-08-01 — Development-only auth bypass
+
+Added `DISABLE_AUTH_GATE=true` (`.env.local`) to skip the password gate while working
+locally, so a forgotten password does not block development.
+
+The flag is read only when `NODE_ENV !== "production"`. `next build` / `next start` and
+every hosting platform set `NODE_ENV=production`, so the bypass cannot open a deployed
+site regardless of how its environment is configured. This was verified rather than
+assumed: a production build with `DISABLE_AUTH_GATE=true` present still redirected
+anonymous page requests to `/login` and still returned 401 on protected APIs, and the
+bypass warning never printed.
+
+That guard is the entire justification. An unguarded bypass would recreate the bug
+found earlier the same day, where the gate silently did not run and every route was
+public. When the bypass is active in development the server prints a warning on the
+first request, and `scripts/check-auth-gate.mjs` fails and names the flag as a likely
+cause — the bypass is never quiet.
