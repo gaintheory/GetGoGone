@@ -264,23 +264,12 @@ function ImportSettings({ toast }) {
     }
   }, []);
 
-  const triggerSchedulerPolling = async () => {
-    setPolling(true);
-    try {
-      const response = await fetch("/api/inventory/import/scheduler", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ interval: "12h" })
-      });
-      const result = await response.json();
-      if (!response.ok || !result.ok) throw new Error(result.error || "Scheduler polling sync failed");
-      
-      toast(`Scheduled stock sync complete! Scanned ${result.scannedCount} stock arrivals, staged proposals in Cockpit.`);
-    } catch (error) {
-      toast(error instanceof Error ? error.message : "Scheduled polling sync failed");
-    } finally {
-      setPolling(false);
-    }
+  // There is no /api/inventory/import/scheduler route — this button used to POST
+  // to it and silently 404. Inventory ingestion is AutoDoss's job now, so rather
+  // than build a scheduler we're slated to delete, say so plainly.
+  // See docs/REDESIGN_2026-06.md → "What this removes from GGG".
+  const triggerSchedulerPolling = () => {
+    toast("Scheduled polling isn't wired up — AutoDoss owns inventory sync.");
   };
 
   return (
@@ -301,15 +290,17 @@ function ImportSettings({ toast }) {
             <input className="input mono" readOnly value={webhookUrl || "Loading receiver URL..."} onClick={(e) => { e.currentTarget.select(); navigator.clipboard.writeText(webhookUrl); toast("Webhook URL copied!"); }} title="Click to copy Webhook URL"/>
           </div>
         </div>
-        <div style={{ padding: 10, background: "rgba(56, 189, 248, 0.08)", border: "1px dashed rgba(56, 189, 248, 0.2)", borderRadius: "var(--radius)", fontSize: 11.5, lineHeight: 1.45, marginBottom: 12 }}>
-          <div style={{ fontWeight: 700, color: "#38bdf8", marginBottom: 3 }}>
-            🤖 Inbound Automation Active
+        <div style={{ padding: 10, background: "rgba(245, 158, 11, 0.08)", border: "1px dashed rgba(245, 158, 11, 0.3)", borderRadius: "var(--radius)", fontSize: 11.5, lineHeight: 1.45, marginBottom: 12 }}>
+          <div style={{ fontWeight: 700, color: "#f59e0b", marginBottom: 3 }}>
+            Not wired up
           </div>
-          Every new stock item decoded from the SFTP catalog or webhook post automatically stages a <strong>Fresh Intake campaign proposal</strong> in the daily Cockpit dashboard, keeping Ray Lawson's command flow human-in-the-loop and safe!
+          Scheduled polling and the intake webhook are not implemented. Inventory now
+          comes from the AutoDoss Data API, which owns ingestion — this panel is staged
+          for removal.
         </div>
         <div className="row" style={{ gap: 8 }}>
           <Btn icon={Icon.Refresh} onClick={triggerSchedulerPolling} disabled={polling}>
-            {polling ? "Syncing..." : "⚡ Run Sync Polling Now"}
+            {polling ? "Syncing..." : "Run Sync Polling Now"}
           </Btn>
           <Btn icon={Icon.Copy} variant="ghost" onClick={() => { navigator.clipboard.writeText(webhookUrl); toast("Webhook URL copied!"); }}>Copy Webhook</Btn>
         </div>

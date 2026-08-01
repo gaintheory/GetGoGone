@@ -30,18 +30,23 @@ function App() {
   const [importDrawer, setImportDrawer] = React.useState(false);
   const [vehicles, setVehicles] = React.useState(GGG.VEHICLES);
   const [inventorySource, setInventorySource] = React.useState("Demo data");
+  const [inventoryNotice, setInventoryNotice] = React.useState(null);
   const [clients, setClients] = React.useState([]);
   const [activeClientId, setActiveClientId] = React.useState("agency_overview");
   const [aiStatus, setAiStatus] = React.useState(null);
   const [refreshKey, setRefreshKey] = React.useState(0);
   const activeClient = clients.find(client => client.id === activeClientId) || null;
 
-  const nav = (screen, id = null) => setRoute({ screen, id });
-  const showToast = (msg) => {
+  // Both of these are passed down as props and land in screen-level effect
+  // dependency arrays. They must be referentially stable, or every App render
+  // (the AI-status poll re-renders us every 30s) re-fires those effects and
+  // clobbers whatever the operator was typing. See docs/humanaudit → Brand Brain.
+  const nav = React.useCallback((screen, id = null) => setRoute({ screen, id }), []);
+  const showToast = React.useCallback((msg) => {
     setToast(msg);
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 2400);
-  };
+  }, []);
 
   React.useEffect(() => {
     let active = true;
@@ -93,6 +98,9 @@ function App() {
     const params = [clientIdParam, "includeArchived=true"].filter(Boolean).join("&");
     const queryStr = params ? `?${params}` : "";
 
+    // Showing demo vehicles without saying so is the most dangerous failure mode
+    // this app has — the UI looks completely healthy while every car on screen is
+    // fictional. Any path that lands on demo data must set inventoryNotice.
     fetch(`/api/inventory${queryStr}`)
       .then((res) => res.json())
       .then((payload) => {
@@ -100,15 +108,35 @@ function App() {
         if (payload?.vehicles?.length) {
           setVehicles(payload.vehicles);
           setInventorySource(payload.source || "Supabase inspections");
+          setInventoryNotice(null);
         } else if (payload?.configured === false) {
+          setVehicles(GGG.VEHICLES);
           setInventorySource("Demo data");
+          setInventoryNotice({
+            tone: "warn",
+            text: "Showing demo vehicles — no inventory source is configured. Nothing here is real.",
+          });
+        } else if (payload?.error) {
+          setVehicles([]);
+          setInventorySource("Unavailable");
+          setInventoryNotice({
+            tone: "error",
+            text: payload.message || "Inventory could not be loaded.",
+          });
         } else {
           setVehicles([]);
           setInventorySource(payload?.source || "GetGoGone vehicles");
+          setInventoryNotice(null);
         }
       })
       .catch(() => {
-        if (active) setInventorySource("Demo data");
+        if (!active) return;
+        setVehicles([]);
+        setInventorySource("Unavailable");
+        setInventoryNotice({
+          tone: "error",
+          text: "Could not reach the inventory API.",
+        });
       });
 
     return () => {
@@ -152,7 +180,7 @@ function App() {
 
   // Campaigns screen redirects to builder for the demo
   const screenMap = {
-    agency: () => <AgencyDashboard clients={clients} activeClient={activeClient} vehicles={vehicles} nav={nav}/>,
+    agency: () => <AgencyDashboard clients={clients} activeClient={activeClient} vehicles={vehicles} nav={nav} onSelectClient={changeClient}/>,
     cockpit: () => <AgencyCockpit nav={nav} clientId={activeClientId} activeClient={activeClient} toast={showToast}/>,
     brandBrain: () => <BrandBrain clientId={activeClientId} activeClient={activeClient} toast={showToast}/>,
     aiLibrary: () => <AiLibrary clientId={activeClientId} activeClient={activeClient} toast={showToast} initialStatus={route.id?.status}/>,
@@ -282,6 +310,24 @@ function App() {
         </div>
       </header>
 
+      {/* Inventory data-source banner. Never let demo data pass as real. */}
+      {inventoryNotice && (
+        <div
+          role="status"
+          style={{
+            gridColumn: "2 / -1",
+            display: "flex", alignItems: "center", gap: 8,
+            padding: "8px 16px", fontSize: 12, fontWeight: 500,
+            borderBottom: "1px solid var(--border)",
+            background: inventoryNotice.tone === "error" ? "rgba(239, 68, 68, 0.10)" : "rgba(245, 158, 11, 0.10)",
+            color: inventoryNotice.tone === "error" ? "var(--danger, #ef4444)" : "#b45309",
+          }}
+        >
+          <Icon.AlertTriangle size={14}/>
+          <span>{inventoryNotice.text}</span>
+        </div>
+      )}
+
       {/* Main */}
       <main className="main" data-screen-label={route.screen} style={isFullBleed ? { padding: 0 } : undefined}>
         {(screenMap[route.screen] || screenMap.dashboard)()}
@@ -325,7 +371,7 @@ function AiStatusBadge({ status }) {
   );
 }
 
-function AgencyDashboard({ clients, activeClient, vehicles, nav }) {
+function AgencyDashboard({ clients, activeClient, vehicles, nav, onSelectClient }) {
   const { Btn, Pill } = UI;
   const clientCount = clients.length;
   const vehicleCount = vehicles.length;
@@ -361,15 +407,30 @@ function AgencyDashboard({ clients, activeClient, vehicles, nav }) {
           </div>
           <div className="card-b col" style={{ gap: 8 }}>
             {clients.length === 0 && <div className="muted">No clients loaded yet.</div>}
-            {clients.map(client => (
-              <div key={client.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", border: "1px solid var(--border)", borderRadius: "var(--radius)", padding: "8px 10px" }}>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 12.5 }}>{client.name}</div>
-                  <div className="muted" style={{ fontSize: 11 }}>{[client.city, client.state].filter(Boolean).join(", ") || client.website_url || "Client profile"}</div>
-                </div>
-                <Pill tone={client.id === activeClient?.id ? "blue" : "gray"}>{client.id === activeClient?.id ? "Active" : "Available"}</Pill>
-              </div>
-            ))}
+            {clients.map(client => {
+              const isActive = client.id === activeClient?.id;
+              return (
+                <button
+                  key={client.id}
+                  type="button"
+                  onClick={() => onSelectClient?.(client.id)}
+                  aria-pressed={isActive}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between",
+                    width: "100%", textAlign: "left", font: "inherit", color: "inherit",
+                    border: `1px solid ${isActive ? "var(--primary)" : "var(--border)"}`,
+                    borderRadius: "var(--radius)", padding: "8px 10px",
+                    background: "transparent", cursor: "pointer",
+                  }}
+                >
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 12.5 }}>{client.name}</div>
+                    <div className="muted" style={{ fontSize: 11 }}>{[client.city, client.state].filter(Boolean).join(", ") || client.website_url || "Client profile"}</div>
+                  </div>
+                  <Pill tone={isActive ? "blue" : "gray"}>{isActive ? "Active" : "Switch to"}</Pill>
+                </button>
+              );
+            })}
           </div>
         </div>
 

@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { resolveDealershipId } from "@/lib/dealerships";
+import { refuseIfLiveCredentialPresent, simulatedId } from "@/lib/publishing/simulation";
 
 export async function POST(request: Request) {
+  const refusal = refuseIfLiveCredentialPresent("google_ads");
+  if (refusal) return refusal;
+
   const supabase = getSupabaseAdmin();
   let body: any = {};
   try {
@@ -23,39 +27,25 @@ export async function POST(request: Request) {
   try {
     const finalDealershipId = supabase ? await resolveDealershipId(supabase, clientId) : null;
 
-    // Check if the operator has provided a drop-in API token
-    const googleToken = process.env.GOOGLE_ADS_TOKEN || process.env.NEXT_PUBLIC_GOOGLE_ADS_TOKEN || null;
-    const isLivePublish = !!googleToken;
+    const adId = simulatedId("gads");
+    const destinationUrl = `https://ads.google.com/campaigns/${adId}`;
 
-    if (isLivePublish) {
-      console.log("[Google Ads Integration] Live publishing token detected! Directing Google Ads API mutate calls...");
-      // In a live production system, this executes actual Google Ads API requests
-    }
-    
-    // Simulate API delay for budget allocation, responsive search ad structure creation, and bid mapping
-    await new Promise((resolve) => setTimeout(resolve, 800));
-
-    const mockAdId = isLivePublish
-      ? `g_live_${Math.floor(100000000 + Math.random() * 900000000)}`
-      : `g_ads_${Math.floor(100000000 + Math.random() * 900000000)}`;
-    const mockDestinationUrl = `https://ads.google.com/campaigns/${mockAdId}`;
-
-    console.log(`[Google Ads] Published Ad ${mockAdId} for campaign ${campaignId} (Mode: ${isLivePublish ? 'LIVE_GOOGLE' : 'MOCK_SIMULATOR'})...`);
+    console.log(`[Google Ads SIMULATED] No API call made. Fake ad ${adId} for campaign ${campaignId}.`);
 
     if (supabase && finalDealershipId) {
       const client = supabase as any;
 
-      // Log the publishing action in the audit log
       await client.from("audit_log").insert({
         dealership_id: finalDealershipId,
-        action: "channel_publish",
+        action: "channel_publish_simulated",
         entity_type: "campaign_channel",
         entity_id: channelId,
         metadata: {
-          campaignId: campaignId,
+          simulated: true,
+          campaignId,
           platform: "google_ads",
-          destinationUrl: mockDestinationUrl,
-          adId: mockAdId,
+          destinationUrl,
+          adId,
           adHeadline: adHeadline || "",
           adBody: adBody || "",
           campaignName: campaignName || "Google Ads Campaign",
@@ -66,14 +56,16 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      adId: mockAdId,
-      status: "active",
-      campaignUrl: mockDestinationUrl,
+      simulated: true,
+      adId,
+      status: "simulated",
+      campaignUrl: destinationUrl,
+      message: "Simulated publish — no Google Ads API call was made.",
       timestamp: new Date().toISOString(),
     });
 
   } catch (err) {
-    console.error("[Google Ads Simulator] Mutating failed:", err);
+    console.error("[Google Ads SIMULATED] Failed:", err);
     return NextResponse.json(
       { error: `Google Ad mutating failed: ${err instanceof Error ? err.message : String(err)}` },
       { status: 500 }

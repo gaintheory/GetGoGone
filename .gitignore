@@ -47,3 +47,6 @@ inspect-db.mjs
 eng.traineddata
 
 .vercel
+
+# supabase cli scratch state (zip-intake working dirs, version pins)
+supabase/.temp/

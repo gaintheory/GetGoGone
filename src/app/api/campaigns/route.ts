@@ -252,6 +252,19 @@ export async function POST(request: Request) {
     // Populate a UTM-tagged destination_url on each channel pointing at the
     // public vehicle landing page. This is how inbound web inquiries get
     // attributed to the right campaign + channel.
+    //
+    // upsertVehicle() returns null for a vehicle with no VIN, which silently
+    // skipped this block: the campaign saved fine, but every channel had a null
+    // destination_url, so the ads pointed nowhere and attribution was dead with
+    // no error anywhere. Surface it instead.
+    const warnings: string[] = [];
+    if (!vehicleId) {
+      warnings.push(
+        "This vehicle has no VIN, so no landing page could be created. " +
+        "The campaign saved, but its channels have no destination URL and inbound leads will not be attributed.",
+      );
+    }
+
     if (vehicleId && channels?.length) {
       const baseUrl = (process.env.PUBLIC_BASE_URL || "").replace(/\/$/, "");
       await Promise.all(channels.map(async (ch) => {
@@ -275,6 +288,7 @@ export async function POST(request: Request) {
       ok: true,
       campaign,
       channels: channels || [],
+      warnings,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to save campaign.";

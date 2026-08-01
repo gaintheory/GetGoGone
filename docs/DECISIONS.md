@@ -170,3 +170,52 @@ Key points (full detail in `docs/REDESIGN_2026-06.md`):
    Video wedge: Remotion per-vehicle vertical video, replacing the mock compiler.
 6. Staged deletions (inventory ingestion, leads tables, `eng.traineddata`) await the
    in-person session — nothing destructive done yet this pass.
+
+## 2026-08-01 — Simulated integrations must never claim to be live
+
+Every publishing route (`meta-ads`, `google-ads`, `google-business`) and the video
+compiler returned fabricated ids. Worse, each had a "live" branch: when a platform
+credential was present they logged `LIVE_GRAPH` / `Veo generation pipeline` and then
+returned a made-up ad id or a path to an `.mp4` that was never rendered. No API client
+existed in either branch. An operator with a token configured would have been told
+their ad was live, and `audit_log` would have recorded `action: "channel_publish"`.
+
+Policy, implemented in `src/lib/publishing/simulation.ts`:
+
+1. A simulated result is labelled `simulated: true` in the response body **and** in
+   `audit_log.metadata`. The audit action is `channel_publish_simulated`, not
+   `channel_publish`. Fake identifiers carry a `sim_` prefix so they cannot be
+   mistaken for platform ids in a log or a screenshot.
+2. If a real platform credential is configured, the route returns **501
+   not_implemented** rather than simulating. Failing loudly is the only safe
+   behaviour until a real API client exists.
+3. Credentials are read from server-only env vars. The `NEXT_PUBLIC_*` fallbacks
+   (`NEXT_PUBLIC_META_ADS_TOKEN`, `NEXT_PUBLIC_GOOGLE_ADS_TOKEN`,
+   `NEXT_PUBLIC_GOOGLE_VEO_API_KEY`, `NEXT_PUBLIC_GOOGLE_OMNI_API_KEY`) are removed:
+   Next.js inlines `NEXT_PUBLIC_*` into the browser bundle, so those names would have
+   shipped the dealer's ad-platform token to every visitor.
+
+The same rule covers the UI: any path that falls back to demo vehicles now raises a
+banner. Silently rendering the 8 hardcoded demo cars as if they were real inventory
+was the most dangerous failure mode in the app.
+
+## 2026-08-01 — `clientId` is a GetGoGone id; AutoDoss ids are mapped, not assumed
+
+`clientId` was being used as two unrelated things. `/api/agency/clients` returns rows
+from GGG's own `dealerships` table, and the app stores `clients[0].id` as
+`activeClientId` — but `/api/inventory` passed that value straight to the AutoDoss
+Data API as an AutoDoss dealer id. Different UUID namespaces, so selecting a client
+asked AutoDoss for a dealer that does not exist there, inventory came back empty, and
+the UI silently fell back to demo data.
+
+Decision: `clientId` always means `dealerships.id` in GetGoGone. Translation to the
+AutoDoss namespace goes through the new `dealerships.autodoss_dealer_id` column via
+`resolveAutodossDealerId()` in `src/lib/dealerships.ts`. An unlinked dealership
+returns **409 `dealership_not_linked`** with a message naming the fix — it is a
+configuration problem the operator can act on, not an empty lot.
+
+Rejected alternative: making `/api/agency/clients` return AutoDoss dealers directly.
+That is closer to the eventual "brand comes from AutoDoss" target, but it would have
+changed the meaning of `clientId` underneath campaigns, creative-templates and
+brand-brain, all of which key off GGG dealership UUIDs. The mapping column is additive
+and reversible; revisit once brand data actually moves to `/dealers`.

@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { resolveDealershipId } from "@/lib/dealerships";
+import { refuseIfLiveCredentialPresent, simulatedId } from "@/lib/publishing/simulation";
 
 export async function POST(request: Request) {
+  const refusal = refuseIfLiveCredentialPresent("meta_ads");
+  if (refusal) return refusal;
+
   const supabase = getSupabaseAdmin();
   let body: any = {};
   try {
@@ -22,40 +26,26 @@ export async function POST(request: Request) {
 
   try {
     const finalDealershipId = supabase ? await resolveDealershipId(supabase, clientId) : null;
-    
-    // Check if the operator has provided a drop-in API token
-    const metaToken = process.env.META_ADS_TOKEN || process.env.NEXT_PUBLIC_META_ADS_TOKEN || null;
-    const isLivePublish = !!metaToken;
 
-    if (isLivePublish) {
-      console.log("[Meta Ads Integration] Live publishing token detected! Directing Graph API mutate calls...");
-      // In a live production system, this executes actual Graph API requests
-    }
+    const adId = simulatedId("meta");
+    const destinationUrl = `https://ads.facebook.com/campaigns/${adId}`;
 
-    // Simulate API delay for ad creation, asset mapping, and security handshake
-    await new Promise((resolve) => setTimeout(resolve, 800));
-
-    const mockAdId = isLivePublish 
-      ? `meta_live_${Math.floor(100000000 + Math.random() * 900000000)}`
-      : `act_meta_${Math.floor(100000000 + Math.random() * 900000000)}`;
-    const mockDestinationUrl = `https://ads.facebook.com/campaigns/${mockAdId}`;
-
-    console.log(`[Meta Ads Simulator] Successfully published Meta Ad ${mockAdId} for campaign ${campaignId} (Mode: ${isLivePublish ? 'LIVE_GRAPH' : 'MOCK_SIMULATOR'})...`);
+    console.log(`[Meta Ads SIMULATED] No API call made. Fake ad ${adId} for campaign ${campaignId}.`);
 
     if (supabase && finalDealershipId) {
       const client = supabase as any;
 
-      // Log the publishing action in the audit log
       await client.from("audit_log").insert({
         dealership_id: finalDealershipId,
-        action: "channel_publish",
+        action: "channel_publish_simulated",
         entity_type: "campaign_channel",
         entity_id: channelId,
         metadata: {
-          campaignId: campaignId,
+          simulated: true,
+          campaignId,
           platform: "meta_paid",
-          destinationUrl: mockDestinationUrl,
-          adId: mockAdId,
+          destinationUrl,
+          adId,
           adHeadline: adHeadline || "",
           adBody: adBody || "",
           campaignName: campaignName || "Meta Campaign",
@@ -66,14 +56,16 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      adId: mockAdId,
-      status: "active",
-      campaignUrl: mockDestinationUrl,
+      simulated: true,
+      adId,
+      status: "simulated",
+      campaignUrl: destinationUrl,
+      message: "Simulated publish — no Meta Ads API call was made.",
       timestamp: new Date().toISOString(),
     });
 
   } catch (err) {
-    console.error("[Meta Ads Simulator] Publishing failed:", err);
+    console.error("[Meta Ads SIMULATED] Failed:", err);
     return NextResponse.json(
       { error: `Meta Ad publishing failed: ${err instanceof Error ? err.message : String(err)}` },
       { status: 500 }

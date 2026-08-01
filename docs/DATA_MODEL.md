@@ -327,3 +327,42 @@ Common `activity_type` values:
 - `viewed_vehicle` — prospect viewed the vehicle landing page
 
 `PATCH /api/leads` (status update) automatically creates a `status_change` activity row. `POST /api/leads/activities` creates any other activity type and sets `leads.last_contacted_at` for outbound activity types.
+
+## dealerships.autodoss_dealer_id
+
+Migration: `supabase/migrations/20260801000001_dealership_autodoss_link.sql`
+
+Purpose: the explicit bridge between GetGoGone's dealership namespace and the AutoDoss
+Data API's dealer namespace. These are unrelated id spaces; before this column existed,
+`/api/inventory` passed a GGG `dealerships.id` to AutoDoss as if it were an AutoDoss
+dealer id, which returned an empty inventory indistinguishable from an empty lot.
+
+Column:
+- `autodoss_dealer_id text` — dealer id in the AutoDoss Data API. Nullable. A unique
+  partial index (`where autodoss_dealer_id is not null`) prevents two GGG dealerships
+  from claiming the same AutoDoss dealer.
+
+`NULL` is a valid state meaning "this dealership is not linked to AutoDoss yet".
+`resolveAutodossDealerId()` in `src/lib/dealerships.ts` returns a discriminated result
+(`resolved` / `use_first_autodoss_dealer` / `unlinked` / `unknown_dealership`) so callers
+must handle the unlinked case explicitly. `/api/inventory` surfaces it as
+409 `dealership_not_linked`.
+
+To link a dealership, set the column to the id AutoDoss reports from `GET /api/v1/dealers`.
+
+## Known gap — `profiles` is unused
+
+`profiles` exists with a `role` column (default `'salesperson'`) and roughly ten tables
+carry `created_by` / `assigned_to` FKs pointing at it. **No application code reads or
+writes `profiles`.** Every `created_by` is null, so `audit_log` records actions with no
+actor and "who published this ad" is unanswerable.
+
+Authentication today is a single shared site password (`SITE_PASSWORD`) with a signed
+cookie that carries no identity — see `src/lib/auth/cookie.ts`. RLS is enabled on every
+table but **no policies are defined**, and the app connects with the service-role key,
+which bypasses RLS entirely. Tenant isolation rests solely on correct `.eq()` filters in
+route handlers.
+
+This is workable for a single operator and must be resolved before any dealer is given a
+login. Either wire Supabase Auth to `profiles`, or drop `profiles` and the dangling FKs
+and record that GetGoGone is single-tenant by design.

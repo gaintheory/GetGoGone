@@ -3,59 +3,55 @@ import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { resolveDealershipId } from "@/lib/dealerships";
 
 // ─── Video Provider Adapter ──────────────────────────────────────────────────
-// Priority order: Google Veo → Google Omni → Local Mock Simulator
-// Drop in the appropriate env var to activate a live provider.
+// There is NO real video renderer wired up yet. This route returns a simulated
+// asset so the Video Studio workflow can be exercised end to end.
+//
+// The previous version claimed otherwise: when GOOGLE_VEO_API_KEY was set it
+// logged "routing to Veo generation pipeline" and returned a path to an .mp4
+// that was never rendered, which would have written a dead file_url into
+// campaign_assets. If a real provider credential is configured we now refuse
+// with 501 rather than fabricate a render.
+//
+// Real implementation target is Remotion (programmatic React → MP4).
+// See docs/REDESIGN_2026-06.md → "the video wedge".
 
-type VideoProvider = "google_veo" | "google_omni" | "local_mock";
+const LIVE_VIDEO_CREDENTIALS = ["GOOGLE_VEO_API_KEY", "GOOGLE_OMNI_API_KEY"];
 
-function resolveVideoProvider(): { provider: VideoProvider; apiKey: string | null } {
-  const veoKey = process.env.GOOGLE_VEO_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_VEO_API_KEY || null;
-  if (veoKey) return { provider: "google_veo", apiKey: veoKey };
-
-  const omniKey = process.env.GOOGLE_OMNI_API_KEY || process.env.NEXT_PUBLIC_GOOGLE_OMNI_API_KEY || null;
-  if (omniKey) return { provider: "google_omni", apiKey: omniKey };
-
-  return { provider: "local_mock", apiKey: null };
+function configuredLiveVideoCredentials(): string[] {
+  return LIVE_VIDEO_CREDENTIALS.filter((name) => {
+    const value = process.env[name];
+    return typeof value === "string" && value.trim().length > 0;
+  });
 }
 
-async function compileWithProvider(
-  provider: VideoProvider,
-  params: { title: string; duration: number; script: string; storyboard: string; vehicleId: string }
+async function compileSimulated(
+  params: { duration: number; vehicleId: string }
 ): Promise<{ videoUrl: string; renderMs: number }> {
   const start = Date.now();
-
-  switch (provider) {
-    case "google_veo":
-      // Live: send to Veo API (token-ready, wire up endpoint when key present)
-      console.log("[Video] Google Veo API key detected — routing to Veo generation pipeline...");
-      await new Promise((r) => setTimeout(r, 1200));
-      return {
-        videoUrl: `/videos/veo-render-${params.vehicleId}-${params.duration}s.mp4`,
-        renderMs: Date.now() - start,
-      };
-
-    case "google_omni":
-      // Fallback live: send to Omni API
-      console.log("[Video] Google Omni API key detected — routing to Omni generation pipeline...");
-      await new Promise((r) => setTimeout(r, 1000));
-      return {
-        videoUrl: `/videos/omni-render-${params.vehicleId}-${params.duration}s.mp4`,
-        renderMs: Date.now() - start,
-      };
-
-    default:
-      // Local simulator — always available, zero credentials required
-      console.log("[Video] No external API key found — using local mock simulator...");
-      await new Promise((r) => setTimeout(r, 800));
-      return {
-        videoUrl: `/videos/mock-render-${params.duration}s.mp4`,
-        renderMs: Date.now() - start,
-      };
-  }
+  await new Promise((r) => setTimeout(r, 800));
+  return {
+    videoUrl: `/videos/simulated-render-${params.duration}s.mp4`,
+    renderMs: Date.now() - start,
+  };
 }
 // ────────────────────────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
+  const liveCredentials = configuredLiveVideoCredentials();
+  if (liveCredentials.length > 0) {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "not_implemented",
+        message:
+          `Video rendering is not implemented yet. ${liveCredentials.join(", ")} is set, but ` +
+          `GetGoGone has no video generation client — it would only be able to return a link ` +
+          `to a file that was never rendered. Unset the credential to use the labelled simulator.`,
+      },
+      { status: 501 },
+    );
+  }
+
   const supabase = getSupabaseAdmin();
   let body: any = {};
   try {
@@ -74,14 +70,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { provider, apiKey: _apiKey } = resolveVideoProvider();
-    console.log(`[Video Compile] Provider resolved: ${provider.toUpperCase()} | Title: "${title}" | Duration: ${duration}s`);
+    const provider = "simulated";
+    console.log(`[Video Compile SIMULATED] No render performed | Title: "${title}" | Duration: ${duration}s`);
 
-    const { videoUrl, renderMs } = await compileWithProvider(provider, {
-      title: title || "Untitled",
+    const { videoUrl, renderMs } = await compileSimulated({
       duration: duration || 30,
-      script,
-      storyboard,
       vehicleId,
     });
 
@@ -102,6 +95,7 @@ export async function POST(request: Request) {
           file_url: videoUrl,
           storage_path: `campaign-assets/${finalDealershipId}/videos/${provider}-${vehicleId}.mp4`,
           metadata: {
+            simulated: true,
             title,
             durationSeconds: duration,
             script,
@@ -123,7 +117,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      message: "Video compiled successfully!",
+      simulated: true,
+      message: "Simulated render — no video file was produced.",
       videoUrl,
       provider,
       renderMs,
@@ -132,6 +127,7 @@ export async function POST(request: Request) {
         format: "mp4",
         file_url: videoUrl,
         metadata: {
+          simulated: true,
           title,
           durationSeconds: duration,
           compiledAt: new Date().toISOString(),

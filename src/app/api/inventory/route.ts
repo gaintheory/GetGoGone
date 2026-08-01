@@ -6,7 +6,7 @@ import {
   type VehicleRowWithPhotos,
 } from "@/features/inventory/prototype-adapter";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
-import { resolveDealershipId } from "@/lib/dealerships";
+import { resolveDealershipId, resolveAutodossDealerId } from "@/lib/dealerships";
 import { isAutodossConfigured, listDealers, listInventory } from "@/lib/autodoss/client";
 import { fromAutodossInventory } from "@/lib/autodoss/adapter";
 
@@ -25,13 +25,61 @@ export async function GET(request: Request) {
 
   // Primary path: read live from AutoDoss over the Data API — no shared DB.
   // (Archived vehicles are intentionally excluded; we don't market them.)
+  //
+  // `clientId` is a GetGoGone dealerships.id and must be translated into an
+  // AutoDoss dealer id before it goes near the Data API. Sending the raw value
+  // returns an empty list that looks exactly like an empty lot.
   if (isAutodossConfigured()) {
     try {
-      const dealershipId = clientId || (await listDealers({ limit: 1 }))[0]?.id;
-      if (!dealershipId) {
+      const supabaseForMapping = getSupabaseAdmin();
+      let autodossDealerId: string | null = null;
+
+      if (supabaseForMapping) {
+        const resolution = await resolveAutodossDealerId(supabaseForMapping, clientId);
+
+        switch (resolution.kind) {
+          case "resolved":
+            autodossDealerId = resolution.autodossDealerId;
+            break;
+          case "use_first_autodoss_dealer":
+            autodossDealerId = (await listDealers({ limit: 1 }))[0]?.id ?? null;
+            break;
+          case "unlinked":
+            return NextResponse.json(
+              {
+                configured: true,
+                source: "AutoDoss API",
+                vehicles: [],
+                error: "dealership_not_linked",
+                message:
+                  `"${resolution.dealershipName ?? resolution.dealershipId}" is not linked to an ` +
+                  `AutoDoss dealer. Set dealerships.autodoss_dealer_id for this client to load its inventory.`,
+              },
+              { status: 409 },
+            );
+          case "unknown_dealership":
+            return NextResponse.json(
+              {
+                configured: true,
+                source: "AutoDoss API",
+                vehicles: [],
+                error: "unknown_dealership",
+                message: `No GetGoGone dealership with id ${resolution.dealershipId}.`,
+              },
+              { status: 404 },
+            );
+        }
+      } else {
+        // No GetGoGone database to map through — fall back to the first dealer
+        // AutoDoss reports. Only sane in a single-dealer setup.
+        autodossDealerId = (await listDealers({ limit: 1 }))[0]?.id ?? null;
+      }
+
+      if (!autodossDealerId) {
         return NextResponse.json({ configured: true, source: "AutoDoss API", vehicles: [] });
       }
-      const items = await listInventory(dealershipId);
+
+      const items = await listInventory(autodossDealerId);
       return NextResponse.json({
         configured: true,
         source: "AutoDoss API",
@@ -40,7 +88,7 @@ export async function GET(request: Request) {
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to load inventory.";
       return NextResponse.json(
-        { configured: true, vehicles: [], error: message },
+        { configured: true, vehicles: [], error: "autodoss_unreachable", message },
         { status: 502 },
       );
     }

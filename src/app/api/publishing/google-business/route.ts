@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/server";
 import { resolveDealershipId } from "@/lib/dealerships";
+import { refuseIfLiveCredentialPresent, simulatedId } from "@/lib/publishing/simulation";
 
 export async function POST(request: Request) {
+  const refusal = refuseIfLiveCredentialPresent("google_business");
+  if (refusal) return refusal;
+
   const supabase = getSupabaseAdmin();
   let body: any = {};
   try {
@@ -22,24 +26,25 @@ export async function POST(request: Request) {
 
   try {
     const finalDealershipId = supabase ? await resolveDealershipId(supabase, clientId) : null;
-    const mockPostId = `gbp_${Math.random().toString(36).substring(2, 10)}`;
-    const mockPostUrl = `https://g.co/kg/p/${mockPostId}`;
+    const postId = simulatedId("gbp");
+    const postUrl = `https://g.co/kg/p/${postId}`;
 
-    console.log(`Publishing directly to Google Business Profile: "${headline || "GBP Post"}"...`);
+    console.log(`[Google Business SIMULATED] No API call made. Fake post ${postId}.`);
 
     if (supabase && finalDealershipId) {
       const client = supabase as any;
 
-      // Log the direct publish event in the audit log
       await client.from("audit_log").insert({
         dealership_id: finalDealershipId,
-        action: "channel_publish_direct",
+        action: "channel_publish_simulated",
         entity_type: "campaign_channel",
         entity_id: channelId,
         metadata: {
+          simulated: true,
+          campaignId: campaignId || null,
           platform: "google_business",
-          postId: mockPostId,
-          postUrl: mockPostUrl,
+          postId,
+          postUrl,
           headline: headline || null,
           primaryText,
           callToAction: callToAction || null,
@@ -51,14 +56,15 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       ok: true,
-      message: "Published directly to Google Business Profile!",
-      postId: mockPostId,
-      postUrl: mockPostUrl,
+      simulated: true,
+      message: "Simulated publish — no Google Business Profile API call was made.",
+      postId,
+      postUrl,
       publishedAt: new Date().toISOString(),
     });
 
   } catch (err) {
-    console.error("Direct GBP publishing simulation failed:", err);
+    console.error("[Google Business SIMULATED] Failed:", err);
     return NextResponse.json(
       { error: `Direct publishing failed: ${err instanceof Error ? err.message : String(err)}` },
       { status: 500 }

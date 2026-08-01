@@ -38,6 +38,48 @@ export async function resolveDealershipId(
   return data?.id ?? null;
 }
 
+export type AutodossDealerResolution =
+  | { kind: "resolved"; autodossDealerId: string }
+  | { kind: "use_first_autodoss_dealer" }
+  | { kind: "unlinked"; dealershipId: string; dealershipName: string | null }
+  | { kind: "unknown_dealership"; dealershipId: string };
+
+/**
+ * Translate a GetGoGone `clientId` into an AutoDoss dealer id.
+ *
+ * These are two different UUID namespaces. The client switcher hands out
+ * GetGoGone `dealerships.id` values; the AutoDoss Data API expects its own
+ * dealer ids. Passing one where the other is expected returns an empty
+ * inventory, which used to be indistinguishable from "this lot has no cars".
+ *
+ * Callers must handle every variant explicitly — in particular `unlinked`,
+ * which is a configuration problem the operator can fix, not an empty lot.
+ */
+export async function resolveAutodossDealerId(
+  supabase: Supabase,
+  clientId?: string | null,
+): Promise<AutodossDealerResolution> {
+  if (!clientId || !clientId.trim() || clientId === "agency_overview") {
+    return { kind: "use_first_autodoss_dealer" };
+  }
+
+  const { data, error } = await supabase
+    .from("dealerships")
+    .select("id, name, autodoss_dealer_id")
+    .eq("id", clientId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return { kind: "unknown_dealership", dealershipId: clientId };
+
+  const linked = data.autodoss_dealer_id;
+  if (linked && linked.trim()) {
+    return { kind: "resolved", autodossDealerId: linked };
+  }
+
+  return { kind: "unlinked", dealershipId: data.id, dealershipName: data.name ?? null };
+}
+
 /**
  * Like `resolveDealershipId`, but creates a default dealership if zero exist.
  * Use this only from write endpoints that genuinely need a dealership to exist

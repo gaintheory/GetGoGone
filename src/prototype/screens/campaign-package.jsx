@@ -210,7 +210,7 @@ function CampaignPackage({ nav, toast, vehicles: providedVehicles, clientId, rou
       });
       const result = await response.json();
       if (!response.ok || !result.ok) throw new Error(result.error || "Campaign package could not be saved");
-      toast("Campaign package saved");
+      toast(result.warnings?.length ? result.warnings[0] : "Campaign package saved");
       nav("campaignReview", result.campaign.id);
     } catch (error) {
       toast(error instanceof Error ? error.message : "Campaign package could not be saved");

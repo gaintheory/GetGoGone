@@ -101,43 +101,56 @@ The core engine (`pipeline.ts`) runs all normalized adapter records through stan
 - **Media Uploads:** Buffers files and securely pushes them to the `campaign-assets` Supabase Storage bucket, creating alt-captioned records in `vehicle_photos` that are mapped instantly onto client views.
 - **Audit Trails:** Logs import outcomes to `audit_log` with details of inserted, updated, skipped, or failed files.
 
-## Drop-in API Credentials
+## Publishing and Video Credentials
 
-GetGoGone is designed with a token-ready architecture: all publishing and video generation routes check for the presence of an environment variable before switching from simulator mode to live mode. No code changes are needed — only a `.env.local` entry.
+**There is no live publishing or video rendering in GetGoGone today.** No ad-platform
+API client and no video renderer exist in the codebase. Every publishing route and the
+video compiler return a *simulated* result.
 
-### Paid Advertising
+This section previously described a "token-ready architecture" where dropping a key into
+`.env.local` switched the routes to live mode with no code changes. That was not true.
+The credential check existed, but both branches returned fabricated data — the "live"
+branch only changed the prefix on the made-up id. An operator who set `META_ADS_TOKEN`
+would have been told their ad was live while nothing had been published.
 
-| Platform | Env Var | Fallback Behavior |
+### Current behaviour
+
+| Route | No credential set | Credential set |
 |---|---|---|
-| Meta Ads (Facebook/Instagram) | `META_ADS_TOKEN` | High-fidelity mock simulator |
-| Google Ads | `GOOGLE_ADS_TOKEN` | High-fidelity mock simulator |
-| CarsForSale Direct API | `CARSFORSALE_API_KEY` | ZIP kit / CSV import |
+| `POST /api/publishing/meta-ads` | Simulated result | **501 not_implemented** |
+| `POST /api/publishing/google-ads` | Simulated result | **501 not_implemented** |
+| `POST /api/publishing/google-business` | Simulated result | **501 not_implemented** |
+| `POST /api/video/compile` | Simulated result | **501 not_implemented** |
 
-Ad ID prefixes distinguish live from mock in audit logs:
-- Live Meta: `meta_live_*` · Simulator: `act_meta_*`
-- Live Google: `g_live_*` · Simulator: `g_ads_*`
+Credentials that trigger the 501: `META_ADS_TOKEN`, `GOOGLE_ADS_TOKEN`,
+`GOOGLE_BUSINESS_TOKEN`, `GOOGLE_VEO_API_KEY`, `GOOGLE_OMNI_API_KEY`.
 
-### Video Generation
+Refusing is deliberate. Until a real API client exists, the only honest response to
+"publish this, here is my token" is to say it is not implemented.
 
-Priority adapter chain (first key found wins):
+### Identifying simulated output
 
-| Priority | Provider | Env Var |
-|---|---|---|
-| 1 | Google Veo | `GOOGLE_VEO_API_KEY` |
-| 2 | Google Omni | `GOOGLE_OMNI_API_KEY` |
-| 3 | Local Mock | _(no key required)_ |
+- Response bodies carry `simulated: true` and a `message` saying no API call was made.
+- Fake ids use a `sim_` prefix (`sim_meta_*`, `sim_gads_*`, `sim_gbp_*`).
+- Audit rows use `action: "channel_publish_simulated"` with `metadata.simulated = true`.
+- `campaign_assets.metadata.simulated` is `true` for simulated video renders, and
+  `file_url` points at a path where no file was ever written.
 
-The resolved provider name is recorded in every `campaign_assets.metadata.provider` field for full audit traceability.
+Anything in the database without those markers predates this change (2026-08-01) and
+should be treated as untrustworthy — the old routes wrote `action: "channel_publish"`
+for results that were equally fabricated.
 
-### How to Activate a Live Provider
+### Never use `NEXT_PUBLIC_*` for credentials
 
-Add the relevant key to `.env.local` at the project root:
+The routes used to accept `NEXT_PUBLIC_META_ADS_TOKEN`, `NEXT_PUBLIC_GOOGLE_ADS_TOKEN`,
+`NEXT_PUBLIC_GOOGLE_VEO_API_KEY` and `NEXT_PUBLIC_GOOGLE_OMNI_API_KEY` as fallbacks.
+Next.js inlines every `NEXT_PUBLIC_*` variable into the client bundle, so setting one of
+those names would have shipped the dealer's ad-platform token to every visitor of the
+site. These fallbacks are removed. Credentials are read from server-only env vars only.
 
-```env
-META_ADS_TOKEN=your_meta_system_user_token
-GOOGLE_ADS_TOKEN=your_google_ads_developer_token
-GOOGLE_VEO_API_KEY=your_veo_api_key
-```
+### Implementing a real integration
 
-Restart the dev server (`npm run dev`) and the routes will automatically detect and switch to live mode on the next request.
-
+Replace the `refuseIfLiveCredentialPresent()` guard in the route with an actual client
+call. The guard lives in `src/lib/publishing/simulation.ts` and is intentionally the
+first statement in each handler, so it is obvious what has to be removed. Target order
+per `docs/REDESIGN_2026-06.md`: Meta Advantage+ catalog feed first, then Remotion video.
