@@ -14,8 +14,24 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000. The whole operator app is behind a password gate; see
-"Authentication" below.
+Open http://localhost:3000. The whole operator app is behind a password gate.
+
+**Forgotten the password?** It is not stored in this repository and cannot be
+recovered — it lives only in the environment where the app runs. Set a new one:
+
+```bash
+node scripts/set-site-password.mjs 'choose something'
+```
+
+That writes `SITE_PASSWORD` to `.env.local` and generates `SITE_AUTH_COOKIE_SECRET`
+if it is missing. Restart the dev server and sign in at `/login`. When deployed, change
+`SITE_PASSWORD` in your host's environment settings instead and redeploy.
+
+After any change to the gate, confirm it is still enforcing:
+
+```bash
+node scripts/check-auth-gate.mjs            # or pass a deployment URL
+```
 
 ## Required environment
 
@@ -41,6 +57,12 @@ vehicles and says so in a banner. If a client is selected but its
 `GET /api/v1/dealers`.
 
 ## Authentication — read this before deploying
+
+The auth gate lives at `src/proxy.ts`. It must sit beside `src/app` and export a
+function named `proxy` — Next.js 16 renamed the old `middleware` convention. Both the
+path and the name matter, and getting either wrong disables the gate **silently**: the
+build, the type checker and lint all still pass while every route serves anonymously.
+That exact bug shipped once. `scripts/check-auth-gate.mjs` guards against a repeat.
 
 There are **no user accounts**. `SITE_PASSWORD` is one shared password; the session
 cookie carries no identity. The `profiles` table and every `created_by` column exist

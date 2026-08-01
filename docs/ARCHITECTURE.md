@@ -34,7 +34,7 @@ Project layout:
 - docs: product and engineering guidance
 - supabase: migrations and seed data
 - packages: future shared/integration/AI code if the app grows into a workspace
-- middleware.ts: Next.js Edge runtime auth gate (project root)
+- src/proxy.ts: Next.js auth gate (must sit beside src/app, not in the project root)
 
 Workspace navigation:
 - The app now starts in an Agency Command screen for the agency-owner workflow.
@@ -130,7 +130,14 @@ Creative persistence:
 
 ## Authentication
 
-- `middleware.ts` (Next.js Edge runtime, project root) intercepts every request and verifies the `ggg_auth` signed cookie before forwarding.
+- `src/proxy.ts` intercepts every request and verifies the `ggg_auth` signed cookie before forwarding.
+  Two constraints, both of which have already caused a total auth bypass once:
+  1. **Location.** With a `src/` directory, the file must be `src/proxy.ts`, beside `src/app`.
+     At the repository root Next.js never loads it and the gate silently does not run.
+  2. **Name.** Next.js 16 renamed the `middleware` convention to `proxy`, and the exported
+     `middleware` function to `proxy`. The `proxy` runtime is always `nodejs`; `edge` is not
+     supported. Neither the build, the type checker, nor lint catches a wrong name or path.
+  Verify with `node scripts/check-auth-gate.mjs` against a running server.
 - Unauthenticated page requests are redirected to `/login?next=<original>`; unauthenticated API requests receive `401 { ok: false, error: "unauthenticated" }`.
 - Public paths that bypass the gate: `PUBLIC_PATHS` (e.g. `/login`), `PUBLIC_API_PREFIXES` (e.g. `/api/leads/inbound`), `PUBLIC_PAGE_PREFIXES` (e.g. `/v/`), and static asset extensions.
 - `src/lib/auth/cookie.ts` — Web Crypto API HMAC-SHA256 cookie signing, 30-day expiry, constant-time signature verification.

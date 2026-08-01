@@ -219,3 +219,36 @@ That is closer to the eventual "brand comes from AutoDoss" target, but it would 
 changed the meaning of `clientId` underneath campaigns, creative-templates and
 brand-brain, all of which key off GGG dealership UUIDs. The mapping column is additive
 and reversible; revisit once brand data actually moves to `/dealers`.
+
+## 2026-08-01 — The auth gate was never running (total bypass)
+
+**Severity: the entire application, including every API route, was reachable without
+authenticating.** Not a weak password — no gate at all.
+
+Two compounding causes:
+
+1. **Wrong location.** The file was `middleware.ts` in the repository root. This project
+   keeps its app in `src/`, and Next.js resolves the convention beside `app` — so it had
+   to be `src/middleware.ts`. At the root the file was simply never loaded.
+2. **Deprecated name.** Next.js 16 renamed the `middleware` file convention to `proxy`
+   and the exported `middleware` function to `proxy`
+   (`node_modules/next/dist/docs/01-app/02-guides/upgrading/version-16.md`). The `proxy`
+   runtime is always `nodejs`; `edge` is not supported.
+
+The file now lives at `src/proxy.ts` and exports `proxy`. Verified live: anonymous page
+requests redirect to `/login`, anonymous API requests get 401, a structurally valid but
+unsigned cookie is rejected, and the `/v/*` and `/api/leads/inbound` public prefixes
+still bypass the gate as intended.
+
+**This failed silently, and that is the real lesson.** `npm run build` passed,
+TypeScript passed, ESLint passed. An auth gate that is not wired up produces no error
+anywhere — the app just serves everything. Nothing short of a live request detects it.
+Hence `scripts/check-auth-gate.mjs`, which asserts the gate enforces and has been
+verified to fail (exit 1) when the gate is removed. Run it against any deployment.
+
+Also added `scripts/set-site-password.mjs`: the site password is not recoverable from
+the codebase — it exists only in the runtime environment — so the operator-facing
+answer to "I forgot the password" is to set a new one.
+
+Assume anything previously exposed at a public URL was publicly readable. Rotate
+`SUPABASE_SERVICE_ROLE_KEY` and `SITE_PASSWORD` if the app was ever deployed.

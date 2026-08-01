@@ -1,3 +1,19 @@
+/**
+ * Site-wide auth gate.
+ *
+ * LOCATION MATTERS. This file must live at `src/proxy.ts` — beside `src/app`, not
+ * at the repository root. It was previously `middleware.ts` in the project root,
+ * where Next.js never loaded it, so the gate silently did not run and every page
+ * and API route was publicly reachable without a session.
+ *
+ * NAME MATTERS TOO. Next.js 16 renamed the `middleware` file convention to `proxy`
+ * and the exported `middleware` function to `proxy`
+ * (node_modules/next/dist/docs/01-app/02-guides/upgrading/version-16.md).
+ * The `proxy` runtime is always `nodejs` and cannot be configured to `edge`.
+ *
+ * If you move or rename this file, re-run the check in scripts/check-auth-gate.mjs.
+ */
+
 import { NextRequest, NextResponse } from "next/server";
 
 import { COOKIE_NAME, verifyCookieValue } from "@/lib/auth/cookie";
@@ -46,7 +62,7 @@ function isPublic(pathname: string): boolean {
   return false;
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
   if (isPublic(pathname)) {
