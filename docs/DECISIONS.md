@@ -291,3 +291,31 @@ found earlier the same day, where the gate silently did not run and every route 
 public. When the bypass is active in development the server prints a warning on the
 first request, and `scripts/check-auth-gate.mjs` fails and names the flag as a likely
 cause — the bypass is never quiet.
+
+## 2026-08-01 — Codespaces as the zero-setup way in
+
+Added `.devcontainer/` so the app can be reached from a browser with nothing but
+GitHub access — no local checkout, no Node install, no knowledge of the site password.
+
+Context: there is no deployed GetGoGone. The repository contains no Vercel, Netlify,
+Docker or GitHub Actions configuration, and the Actions API reports zero workflows.
+The app exists only while someone runs it, so "I cannot get into the site" from a
+machine without the repo had no answer at all until now.
+
+`setup.sh` runs on container create and installs dependencies. It deliberately does
+**not** write `.env.local`, generate credentials, or touch the auth gate. An earlier
+draft did all three so the Codespace would open straight into the app; that was the
+wrong trade. A committed script that disables authentication is a footgun — it invites
+being copied into a context where the guard does not hold, and it hides a security
+decision inside routine setup. Configuring the environment stays an explicit human
+step, printed as instructions instead:
+
+    echo "DISABLE_AUTH_GATE=true" > .env.local
+    npm run dev
+
+Verified that a `.env.local` containing only that single line is sufficient: the gate
+short-circuits before any cookie work, so no `SITE_AUTH_COOKIE_SECRET` is needed and
+the app serves the operator shell without error.
+
+Codespaces forwards ports privately to the creating account by default. The setup
+output warns against switching port 3000 to public visibility.

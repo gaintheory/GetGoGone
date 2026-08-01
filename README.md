@@ -7,6 +7,34 @@ feeds, publishes them across channels, and hands warm leads back to AutoDoss.
 GetGoGone is **not** a DMS, a CRM, or a lead inbox — AutoDoss owns all of those.
 See `docs/REDESIGN_2026-06.md` for the seam between the two systems.
 
+## Running it from a browser (no local setup)
+
+If you are away from your development machine, open the repo in a **GitHub Codespace**:
+
+> On GitHub → green **Code** button → **Codespaces** tab → **Create codespace on
+> `<branch>`**
+
+`.devcontainer/` installs dependencies for you. Then, in the Codespace terminal:
+
+```bash
+echo "DISABLE_AUTH_GATE=true" > .env.local
+npm run dev
+```
+
+Open the forwarded port 3000 and you are in, no password required. First container
+build takes a couple of minutes.
+
+The devcontainer deliberately does not write `.env.local` or disable the gate for you —
+a committed script that turns authentication off is too easy to copy somewhere it does
+not belong. Doing it yourself keeps it an explicit choice.
+
+The forwarded port is private to your GitHub account by default. If you disable the
+gate, **do not set port 3000 to Public** — that would expose the whole app with no
+password.
+
+If Codespaces is unavailable, an organisation owner may need to enable it for the repo
+under Settings → Codespaces.
+
 ## Running locally
 
 ```bash
