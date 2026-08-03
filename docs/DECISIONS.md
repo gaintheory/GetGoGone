@@ -220,38 +220,41 @@ changed the meaning of `clientId` underneath campaigns, creative-templates and
 brand-brain, all of which key off GGG dealership UUIDs. The mapping column is additive
 and reversible; revisit once brand data actually moves to `/dealers`.
 
-## 2026-08-01 — The auth gate was never running (total bypass)
+## 2026-08-01 — The auth gate did not run under `next dev` (development only)
 
-**Severity: the entire application, including every API route, was reachable without
-authenticating.** Not a weak password — no gate at all.
+**Corrected 2026-08-01.** This entry originally claimed a total production bypass —
+that every page and API route on the deployed site was reachable without a session,
+and that keys should be rotated. **That was wrong.** Production was never exposed.
+The claim was made after testing only `next dev`, then generalising without checking
+a production build or the live site. The record is corrected here rather than deleted,
+because the original conclusion was acted on.
 
-Two compounding causes:
+What was actually true: the gate lived at `middleware.ts` in the repository root while
+the app lives in `src/`.
 
-1. **Wrong location.** The file was `middleware.ts` in the repository root. This project
-   keeps its app in `src/`, and Next.js resolves the convention beside `app` — so it had
-   to be `src/middleware.ts`. At the root the file was simply never loaded.
-2. **Deprecated name.** Next.js 16 renamed the `middleware` file convention to `proxy`
-   and the exported `middleware` function to `proxy`
-   (`node_modules/next/dist/docs/01-app/02-guides/upgrading/version-16.md`). The `proxy`
-   runtime is always `nodejs`; `edge` is not supported.
+- **Production builds honoured it.** Verified two ways: `scripts/check-auth-gate.mjs`
+  against the live site passed every check, and a local `next build && next start` with
+  the original root `middleware.ts` restored also passed every check. `next build` even
+  reported `ƒ Proxy (Middleware)` in its route table, confirming it was picked up.
+- **`next dev` (Turbopack) silently ignored it.** With the identical file, the dev
+  server served `/` and `/api/agency/clients` with 200 to anonymous requests.
 
-The file now lives at `src/proxy.ts` and exports `proxy`. Verified live: anonymous page
-requests redirect to `/login`, anonymous API requests get 401, a structurally valid but
-unsigned cookie is rejected, and the `/v/*` and `/api/leads/inbound` public prefixes
-still bypass the gate as intended.
+So the exposure was real but scoped to local development. No production incident, and
+no key rotation was warranted.
 
-**This failed silently, and that is the real lesson.** `npm run build` passed,
-TypeScript passed, ESLint passed. An auth gate that is not wired up produces no error
-anywhere — the app just serves everything. Nothing short of a live request detects it.
-Hence `scripts/check-auth-gate.mjs`, which asserts the gate enforces and has been
-verified to fail (exit 1) when the gate is removed. Run it against any deployment.
+The move to `src/proxy.ts` still stands and is still worth having:
 
-Also added `scripts/set-site-password.mjs`: the site password is not recoverable from
-the codebase — it exists only in the runtime environment — so the operator-facing
-answer to "I forgot the password" is to set a new one.
+1. Next.js 16 deprecated the `middleware` file convention in favour of `proxy`, and the
+   `middleware` export in favour of `proxy`
+   (`node_modules/next/dist/docs/01-app/02-guides/upgrading/version-16.md`).
+2. `src/proxy.ts` is the correct location for a `src/`-based project, and it makes dev
+   behave like production. A gate that is off in development is a bad place to test
+   anything auth-adjacent, and it invites shipping a change that only appears to work.
 
-Assume anything previously exposed at a public URL was publicly readable. Rotate
-`SUPABASE_SERVICE_ROLE_KEY` and `SITE_PASSWORD` if the app was ever deployed.
+`scripts/check-auth-gate.mjs` exists because none of this surfaces on its own: build,
+typecheck and lint all pass either way. It has been verified to fail (exit 1) when the
+gate is not enforcing. Run it against dev **and** against the deployment — the lesson
+of this entry is that those two can disagree.
 
 ## 2026-08-01 — Executed part of the staged June cleanup
 
@@ -319,3 +322,27 @@ the app serves the operator shell without error.
 
 Codespaces forwards ports privately to the creating account by default. The setup
 output warns against switching port 3000 to public visibility.
+
+## 2026-08-01 — Production deployment exists (correcting the record)
+
+An earlier statement in this session — that GetGoGone has no deployment — was wrong.
+**getgogone.com is live on Vercel**, deployed from `master`, Git-integrated.
+
+The mistake: the repository contains no `vercel.json`, no Dockerfile and no GitHub
+Actions workflow, and `.vercel` is gitignored, so nothing in the tree points at a host.
+Absence of configuration was treated as absence of a deployment. A Vercel Git
+integration configured through the dashboard leaves no trace in the repository at all,
+so that inference was never valid.
+
+Consequences worth recording:
+
+- Production is the source of truth for how the app really behaves. Conclusions drawn
+  from `next dev` alone do not transfer — see the auth-gate entry above, where the two
+  environments genuinely disagreed.
+- `SITE_PASSWORD` and the other runtime secrets live in Vercel's environment variables
+  (Project → Settings → Environment Variables), not in any file here. That is where the
+  site password is read or changed, followed by a redeploy.
+- Production tracks `master`. Work on a branch is not live until merged.
+
+`scripts/check-auth-gate.mjs` accepts a base URL specifically so the deployment can be
+checked directly: `node scripts/check-auth-gate.mjs https://getgogone.com`.

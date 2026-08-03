@@ -99,10 +99,15 @@ vehicles and says so in a banner. If a client is selected but its
 ## Authentication — read this before deploying
 
 The auth gate lives at `src/proxy.ts`. It must sit beside `src/app` and export a
-function named `proxy` — Next.js 16 renamed the old `middleware` convention. Both the
-path and the name matter, and getting either wrong disables the gate **silently**: the
-build, the type checker and lint all still pass while every route serves anonymously.
-That exact bug shipped once. `scripts/check-auth-gate.mjs` guards against a repeat.
+function named `proxy` — Next.js 16 renamed the old `middleware` convention.
+
+Getting the path or name wrong fails **silently**, and worse, can fail *differently*
+between environments. This repo previously had it at `middleware.ts` in the root:
+production builds honoured it, but `next dev` ignored it entirely and served every
+route anonymously. Build, typecheck and lint all pass either way.
+
+Run `scripts/check-auth-gate.mjs` against your dev server **and** against the
+deployment. The point of checking both is that they can disagree.
 
 There are **no user accounts**. `SITE_PASSWORD` is one shared password; the session
 cookie carries no identity. The `profiles` table and every `created_by` column exist
